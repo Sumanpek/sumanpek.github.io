@@ -126,17 +126,20 @@
 
   <!-- ================= VISTA: INICIO DE SESIÓN ================= -->
   <section id="v-login" class="vista hidden min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-navy-950 via-navy-900 to-marca-800">
-    <div class="w-full max-w-sm">
+    <div id="login-caja" class="w-full max-w-sm transition-all">
       <div class="bg-white rounded-3xl shadow-2xl p-8 text-center">
         <img src="logo.png" alt="Sumanpek, C.A." class="mx-auto mb-3 h-32 w-32 object-contain drop-shadow-md">
         <h1 class="text-2xl font-extrabold text-navy-900">Sistema de Asistencia</h1>
         <p class="text-sm text-slate-500 mt-1">Recursos Humanos · Sumanpek, C.A.</p>
         <div class="mt-3 mx-auto h-1 w-16 rounded-full bg-gradient-to-r from-marca-700 via-oro-400 to-navy-900"></div>
         <div class="my-7 border-t border-slate-100"></div>
-        <p class="text-sm font-medium text-slate-700 mb-4">Inicia sesión con tu cuenta de Google</p>
-        <div id="btn-google" class="flex justify-center min-h-[44px]"></div>
-        <div id="login-msg" class="hidden mt-5 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 text-left"></div>
-        <p class="text-xs text-slate-400 mt-6 leading-relaxed">Usa el correo de Gmail que registró Recursos Humanos.<br>Para marcar asistencia debes estar en la empresa con el GPS activado.</p>
+        <div id="login-google">
+          <p class="text-sm font-medium text-slate-700 mb-4">Inicia sesión con tu cuenta de Google</p>
+          <div id="btn-google" class="flex justify-center min-h-[44px]"></div>
+          <div id="login-msg" class="hidden mt-5 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 text-left"></div>
+          <p class="text-xs text-slate-400 mt-6 leading-relaxed">¿Eres nuevo? Inicia sesión con tu Gmail y podrás solicitar tu acceso.<br>Para marcar asistencia debes estar en la empresa con el GPS activado.</p>
+        </div>
+        <div id="login-acceso" class="hidden text-left"></div>
       </div>
       <p class="text-center text-xs text-white/60 mt-6">© <span id="anio"></span> Sumanpek, C.A. · Uso interno · Apps Anabel v<span id="version">2.0</span> · <a href="privacidad.html" class="underline hover:text-white">Privacidad</a></p>
     </div>
@@ -340,6 +343,16 @@
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
             <button data-acc="nuevo-empleado" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Nuevo empleado</button>
           </div>
+        </div>
+        <div id="acc-panel" class="tarjeta mb-5 no-print hidden">
+          <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <h3 class="titulo-tarjeta">Solicitudes de acceso al sistema</h3>
+              <span id="acc-total" class="insignia bg-oro-400 text-navy-950">0</span>
+            </div>
+            <p class="text-xs text-slate-500">Personas que iniciaron sesión con su Gmail y pidieron ser registradas.</p>
+          </div>
+          <div id="acc-tabla" class="overflow-x-auto scroll-fino"></div>
         </div>
         <div class="tarjeta p-4 mb-5 no-print grid sm:grid-cols-3 gap-3">
           <div class="relative">

@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.0.1 — Fase 2)
+ *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.1.0 — Fase 2)
  * ==========================================================================
  */
 'use strict';
@@ -13,11 +13,12 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '2.0.1';
+const VERSION = '2.1.0';
 
 /* ============================== 2. ESTADO ============================== */
 const S = {
   solicitudes: [],
+  accesos: [],
   audio: null,
   token: null,
   sesion: null,
@@ -36,21 +37,20 @@ const S = {
   cargas: 0
 };
 
-// Interfaz: principal #C10866 · secundario #031263 · apoyo #EECF15 (solo botones, menús y textos).
-// Gráficos: paleta "Taller de sublimación", 16 tonos pastel y vivos, independiente de la interfaz.
+// Interfaz: principal #C10866 · secundario #031263 · apoyo #EECF15 (botones, menús y textos; no se toca).
+// Gráficos: paleta "Tintas de sublimación" — colores saturados inspirados en las tintas CMYK
+// con que se sublima, más los tres colores de la marca. Mismo carácter fuerte que el logo.
 const PALETA = {
-  lavanda: '#9883E5', aguamarina: '#50C9CE', chicle: '#F2A0B6', cielo: '#72A1E5', mostaza: '#F2C46D',
-  salvia: '#8CC7A1', terracota: '#B26E63', malva: '#7B6B90', durazno: '#F4A97F', cobalto: '#385AB6',
-  olivo: '#CEC075', coral: '#E57A8C', liquen: '#9DA9A0', berenjena: '#533961', algodon: '#FCD3DE', tinta: '#2E382E',
-  niebla: '#B4C2D0'
+  magenta: '#C10866', cian: '#00A0E3', amarillo: '#EECF15', azul: '#031263', naranja: '#F26B1D',
+  turquesa: '#00A68C', purpura: '#6A1B9A', rey: '#2F6FDE', lima: '#7CB518', vino: '#8E1A5A',
+  ambar: '#F5A800', rosa: '#FF4F9A', rojo: '#E4002B', grafito: '#3A3F58', cobre: '#A0522D', acero: '#7A8CA5'
 };
 const COLORES = {
-  marca: '#C10866', navy: '#031263', oro: '#EECF15',                  // solo para el confeti (identidad)
-  aTiempo: PALETA.aguamarina, tarde: PALETA.mostaza, ausente: PALETA.coral, justificado: PALETA.niebla,
-  extra: PALETA.cielo, retraso: PALETA.terracota,
-  bueno: PALETA.aguamarina, medio: PALETA.mostaza, bajo: PALETA.coral,
-  serie: [PALETA.lavanda, PALETA.aguamarina, PALETA.chicle, PALETA.cielo, PALETA.mostaza, PALETA.salvia, PALETA.terracota,
-    PALETA.malva, PALETA.durazno, PALETA.cobalto, PALETA.olivo, PALETA.coral, PALETA.liquen, PALETA.berenjena, PALETA.algodon, PALETA.tinta]
+  marca: '#C10866', navy: '#031263', oro: '#EECF15',
+  aTiempo: PALETA.turquesa, tarde: PALETA.amarillo, ausente: PALETA.magenta, justificado: PALETA.acero,
+  extra: PALETA.cian, retraso: PALETA.magenta,
+  serie: [PALETA.magenta, PALETA.cian, PALETA.amarillo, PALETA.azul, PALETA.naranja, PALETA.turquesa, PALETA.purpura, PALETA.rey,
+    PALETA.lima, PALETA.vino, PALETA.ambar, PALETA.rosa, PALETA.rojo, PALETA.grafito, PALETA.cobre, PALETA.acero]
 };
 const colorSerie = i => COLORES.serie[i % COLORES.serie.length];
 const conAlfa = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -276,9 +276,11 @@ async function api(action, payload = {}, { silencioso = false, texto = 'Cargando
     if (!j.ok) {
       if (j.error === 'SESION_EXPIRADA') { cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'); throw new Error('Sesión expirada.'); }
       if (j.error === 'NO_REGISTRADO') {
-        const correo = decodificarJWT(S.token || '')?.email || 'tu correo';
-        cerrarSesion(`El correo ${correo} no está registrado o está inactivo. Contacta a Recursos Humanos.`);
-        throw new Error('Correo no registrado.');
+        if (S.sesion) {
+          cerrarSesion('Tu acceso fue desactivado. Contacta a Recursos Humanos.');
+          throw new Error('Correo no registrado.');
+        }
+        const err = new Error('NO_REGISTRADO'); err.codigo = 'NO_REGISTRADO'; throw err;
       }
       throw new Error(j.error || 'Error desconocido.');
     }
@@ -322,6 +324,9 @@ function mensajeLogin(msg) {
 }
 
 function mostrarLogin(msg = '') {
+  $('#login-google').classList.remove('hidden');
+  $('#login-acceso').classList.add('hidden');
+  $('#login-caja').classList.replace('max-w-md', 'max-w-sm');
   detenerReloj();
   mostrarVista('v-login');
   mensajeLogin(msg);
@@ -355,6 +360,7 @@ async function cargarSesion() {
       toast(`El servidor está en la versión ${S.sesion.version || '1.x'} y la página en la ${VERSION}. En Apps Script: Implementar → Gestionar implementaciones → ✏️ → Nueva versión.`, 'aviso', 15000);
     }
   } catch (e) {
+    if (e.codigo === 'NO_REGISTRADO') return mostrarAcceso();
     if (!S.token) return; // ya se mostró el mensaje en cerrarSesion
     S.token = null;
     try { sessionStorage.removeItem('aa_token'); } catch (x) { /* nada */ }
@@ -370,6 +376,63 @@ function cerrarSesion(msg = '') {
   cerrarModal();
   document.body.classList.remove('rol-direccion', 'rol-rrhh');
   mostrarLogin(msg);
+}
+
+/* ---------- Solicitud de acceso (personas aún no registradas) ---------- */
+async function mostrarAcceso() {
+  let d;
+  try { d = await api('estadoAcceso', {}, { texto: 'Verificando tu correo…' }); }
+  catch (e) { return mostrarLogin(e.message); }
+  if (d.registrado) return cargarSesion();
+  mostrarVista('v-login');
+  $('#login-google').classList.add('hidden');
+  $('#login-caja').classList.replace('max-w-sm', 'max-w-md');
+  const cont = $('#login-acceso');
+  cont.classList.remove('hidden');
+  const sol = d.solicitud;
+  const otraCuenta = '<button data-acc="salir" class="btn-fantasma btn-sm w-full mt-2"><i data-lucide="log-out" class="w-4 h-4"></i>Usar otra cuenta de Google</button>';
+
+  if (sol && sol.Estado === 'Pendiente') {
+    cont.innerHTML = `<div class="text-center">
+      <div class="mx-auto mb-3 h-14 w-14 rounded-full bg-oro-100 text-oro-700 flex items-center justify-center"><i data-lucide="hourglass" class="w-7 h-7"></i></div>
+      <p class="font-bold text-navy-900 text-lg">Solicitud en revisión</p>
+      <p class="text-sm text-slate-600 mt-1">Hola ${esc(sol.Nombres)}, Recursos Humanos está verificando tus datos. Cuando te aprueben podrás entrar con <b>${esc(d.email)}</b>.</p>
+      <p class="text-xs text-slate-400 mt-2">Enviada el ${esc(String(sol.Creado).slice(0, 16))} · ${esc(sol.Departamento)}</p>
+      <button data-acc="revisar-acceso" class="btn-primario w-full mt-5"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Verificar de nuevo</button>${otraCuenta}</div>`;
+    return iconos();
+  }
+  const deptos = opciones(d.departamentos, '', 'Selecciona tu departamento…');
+  cont.innerHTML = `
+    <p class="font-bold text-navy-900 text-lg text-center">Solicita tu acceso</p>
+    <p class="text-sm text-slate-500 text-center mt-1 mb-4">Tu correo aún no está registrado. Completa tus datos y Recursos Humanos los verificará.</p>
+    ${sol && sol.Estado === 'Rechazada' ? `<div class="mb-4 rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-sm text-rose-700"><b>Tu solicitud anterior fue rechazada.</b>${sol.ComentarioRevision ? '<br>Motivo: ' + esc(sol.ComentarioRevision) : ''}</div>` : ''}
+    <form id="f-acceso" class="space-y-3">
+      <div><label class="etiqueta">Correo (verificado por Google)</label><input class="campo bg-slate-50 text-slate-500" value="${esc(d.email)}" disabled></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">Nombres *</label><input name="Nombres" class="campo" required maxlength="60" autocomplete="given-name"></div>
+        <div><label class="etiqueta">Apellidos *</label><input name="Apellidos" class="campo" required maxlength="60" autocomplete="family-name"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">Cédula *</label><input name="Cedula" class="campo" required maxlength="15" placeholder="V-12345678"></div>
+        <div><label class="etiqueta">Fecha de nacimiento *</label><input name="FechaNacimiento" type="date" class="campo" required max="${hoyStr()}"></div>
+      </div>
+      <div><label class="etiqueta">Departamento *</label><select name="Departamento" class="campo" required>${deptos}</select></div>
+      <div><label class="etiqueta">Teléfono (opcional)</label><input name="Telefono" type="tel" class="campo" maxlength="20" placeholder="0414-0000000" autocomplete="tel"></div>
+      <button type="button" data-acc="enviar-acceso" class="btn-primario w-full !mt-5"><i data-lucide="send" class="w-4 h-4"></i>Enviar solicitud</button>
+    </form>${otraCuenta}`;
+  iconos();
+}
+
+async function enviarAcceso() {
+  const form = $('#f-acceso');
+  if (!form.reportValidity()) return;
+  try {
+    await api('solicitarAcceso', datosFormulario(form), { texto: 'Enviando solicitud…' });
+    toast('¡Solicitud enviada! Recursos Humanos la revisará.', 'ok', 6000);
+    mostrarAcceso();
+  } catch (e) {
+    if (e.codigo !== 'NO_REGISTRADO') toast(e.message, 'error', 7000);
+  }
 }
 
 /* ======================= 7. MARCAJE DE ASISTENCIA ======================= */
@@ -718,18 +781,19 @@ function mostrarAdmin() {
   $('#per-tipo').innerHTML = opciones(s.catalogos.tiposPermiso, '', 'Todos los tipos');
   $('#per-estado').innerHTML = opciones(s.catalogos.estadosPermiso, '', 'Todos los estados');
   actualizarInsignia(s.solicitudesPendientes || 0);
+  actualizarInsignia(s.accesosPendientes || 0, 'empleados');
   navegar(S.seccion === 'mi-marcaje' ? 'dashboard' : S.seccion);
 }
 
 function construirNavegacion() {
   $('#nav-lateral').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${s.id === 'asistencia' ? '<span data-insignia class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>' : ''}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${['asistencia', 'empleados'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
   $('#nav-movil-items').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${s.id === 'asistencia' ? '<span data-insignia class="hidden insignia bg-oro-400 text-navy-950">0</span>' : ''}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${['asistencia', 'empleados'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
 }
 
-function actualizarInsignia(n) {
-  $$('[data-insignia]').forEach(b => { b.textContent = n; b.classList.toggle('hidden', !n); });
+function actualizarInsignia(n, sec = 'asistencia') {
+  $$(`[data-insignia="${sec}"]`).forEach(b => { b.textContent = n; b.classList.toggle('hidden', !n); });
 }
 
 function navegar(sec) {
@@ -811,6 +875,8 @@ async function datosPeriodo(p, forzar) {
     S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
     S.solicitudes = d.solicitudes || [];
     actualizarInsignia(S.solicitudes.filter(x => x.Estado === 'Pendiente').length);
+    S.accesos = d.accesos || [];
+    actualizarInsignia(S.accesos.filter(x => x.Estado === 'Pendiente').length, 'empleados');
     S.catalogoListo = true;
     S.periodos[p] = { desde: f.desde, hasta: f.hasta, asistencia: d.asistencia, t: Date.now() };
   }
@@ -823,6 +889,7 @@ async function asegurarCatalogo(forzar = false) {
   const d = await api('datosPeriodo', { desde: h, hasta: h }, { texto: 'Cargando…' });
   S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
   S.solicitudes = d.solicitudes || [];
+  S.accesos = d.accesos || [];
   S.catalogoListo = true;
 }
 
@@ -1197,6 +1264,8 @@ function pintarAlertas(depto, q) {
   const ids = new Set(emps.map(e => e.ID));
   const a = [];
   const item = (icono, color, titulo, detalle, id, acc = `data-acc="ver-expediente" data-id="${esc(id)}"`) => a.push({ icono, color, titulo, detalle, id, acc });
+  (S.accesos || []).filter(x => x.Estado === 'Pendiente' && (!depto || x.Departamento === depto)).forEach(x =>
+    item('user-plus', 'ambar', `Solicitud de acceso: ${x.Nombres} ${x.Apellidos}`, `${x.Departamento} · ${x.Email}`, '', 'data-acc="nav" data-sec="empleados"'));
   S.solicitudes.filter(x => x.Estado === 'Pendiente' && ids.has(x.EmpleadoID)).forEach(x =>
     item('clipboard-pen', 'ambar', `Marcaje por aprobar: ${nombreCompleto(empPorId(x.EmpleadoID))}`, `${fmtFecha(x.Fecha)} · ${x.Justificativo}`, x.EmpleadoID, 'data-acc="nav" data-sec="asistencia"'));
 
@@ -1233,9 +1302,63 @@ async function cargarEmpleados(forzar = false) {
     if (forzar || !S.empleados.length) {
       const d = await api('listarEmpleados', {}, { texto: 'Cargando empleados…' });
       S.empleados = d.empleados;
+      S.accesos = d.accesos || [];
     }
   } catch (e) { return toast(e.message, 'error'); }
   pintarEmpleados();
+  pintarAccesos();
+}
+
+function pintarAccesos() {
+  const pend = (S.accesos || []).filter(x => x.Estado === 'Pendiente')
+    .sort((a, b) => a.Creado < b.Creado ? -1 : 1);
+  actualizarInsignia(pend.length, 'empleados');
+  $('#acc-panel').classList.toggle('hidden', !pend.length);
+  $('#acc-total').textContent = `${pend.length} pendiente${pend.length === 1 ? '' : 's'}`;
+  renderTabla('acc-tabla', 't-accesos', [
+    { t: 'Persona', v: x => `<b>${esc(x.Nombres)} ${esc(x.Apellidos)}</b><div class="text-xs text-slate-400">${esc(x.Email)}</div>`, s: x => x.Nombres },
+    { t: 'Cédula', v: x => esc(x.Cedula) },
+    { t: 'Nacimiento', v: x => fmtFecha(x.FechaNacimiento) },
+    { t: 'Departamento', v: x => esc(x.Departamento), s: x => x.Departamento },
+    { t: 'Teléfono', v: x => esc(x.Telefono || '—') },
+    { t: 'Enviada', v: x => `<span class="text-xs text-slate-500">${esc(String(x.Creado).slice(0, 16))}</span>`, s: x => x.Creado },
+    { t: 'Observación', v: x => x.Nota ? `<span class="text-xs font-semibold text-amber-700">${esc(x.Nota)}</span>` : '<span class="text-xs text-emerald-600">Sin coincidencias</span>', cls: 'envolver' },
+    { t: '', v: x => `<div class="flex justify-end gap-1 solo-rrhh whitespace-nowrap">
+        <button data-acc="revisar-solicitud-acceso" data-id="${esc(x.ID)}" class="btn btn-sm bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><i data-lucide="user-check" class="w-4 h-4"></i>Revisar y aprobar</button>
+        <button data-acc="rechazar-acceso" data-id="${esc(x.ID)}" class="btn btn-sm bg-rose-50 text-rose-700 hover:bg-rose-100"><i data-lucide="x" class="w-4 h-4"></i>Rechazar</button></div>`, cls: 'text-right' }
+  ], pend, { pie: false });
+}
+
+function revisarAcceso(id) {
+  const x = (S.accesos || []).find(a => a.ID === id);
+  if (!x) return toast('Solicitud no encontrada.', 'error');
+  formEmpleado(null, {
+    acceso: x,
+    base: { Nombres: x.Nombres, Apellidos: x.Apellidos, Cedula: x.Cedula, FechaNacimiento: x.FechaNacimiento,
+      Departamento: x.Departamento, Telefono: x.Telefono, Email: x.Email }
+  });
+}
+
+async function rechazarAcceso(id) {
+  const x = (S.accesos || []).find(a => a.ID === id);
+  const motivo = await dialogo({ titulo: 'Rechazar solicitud de acceso', mensaje: `${x ? x.Nombres + ' ' + x.Apellidos : 'La persona'} verá este motivo al iniciar sesión y podrá enviar una nueva solicitud.`,
+    boton: 'Rechazar', peligro: true, conTexto: true, placeholder: 'Ej.: No trabajas en Sumanpek / La cédula no coincide.' });
+  if (!motivo) return;
+  try {
+    await api('resolverAcceso', { id, decision: 'Rechazada', comentario: motivo }, { texto: 'Rechazando…' });
+    toast('Solicitud rechazada.', 'ok');
+    cargarEmpleados(true);
+  } catch (e) { toast(e.message, 'error', 6000); }
+}
+
+async function vincularAcceso(id, empId) {
+  const emp = empPorId(empId);
+  if (!await dialogo({ titulo: 'Vincular correo', mensaje: `El correo se agregará al expediente existente ${empId}${emp ? ' (' + nombreCompleto(emp) + ')' : ''}, sin crear uno nuevo.`, boton: 'Vincular' })) return;
+  try {
+    await api('resolverAcceso', { id, decision: 'Aprobada', vincularA: empId }, { texto: 'Vinculando…' });
+    toast('Correo vinculado. La persona ya puede entrar.', 'ok', 6000);
+    cerrarModal(); invalidarCache(); cargarEmpleados(true);
+  } catch (e) { toast(e.message, 'error', 6000); }
 }
 
 function pintarEmpleados() {
@@ -1267,8 +1390,8 @@ function pintarEmpleados() {
   ], lista, { vacio: S.empleados.length ? 'Ningún empleado coincide con la búsqueda.' : 'Aún no hay empleados. Pulsa "Nuevo empleado" para comenzar.' });
 }
 
-function formEmpleado(id = null) {
-  const e = id ? empPorId(id) : { Estado: 'Activo', Rol: 'EMPLEADO', TipoContrato: 'Tiempo indeterminado', FechaIngreso: hoyStr() };
+function formEmpleado(id = null, { acceso = null, base = {} } = {}) {
+  const e = id ? empPorId(id) : Object.assign({ Estado: 'Activo', Rol: 'EMPLEADO', TipoContrato: 'Tiempo indeterminado', FechaIngreso: hoyStr() }, base);
   if (!e) return toast('Empleado no encontrado.', 'error');
   const c = (name, label, type = 'text', extra = '') =>
     `<div><label class="etiqueta">${label}</label><input name="${name}" type="${type}" class="campo" value="${esc(e[name] || '')}" ${extra}></div>`;
@@ -1277,17 +1400,23 @@ function formEmpleado(id = null) {
   const cat = S.sesion.catalogos;
   const volver = S.exp && S.exp.empleado.ID === id ? (() => verExpediente(id, S.expTab)) : null;
   abrirModal({
-    titulo: id ? `Editar: ${nombreCompleto(e)}` : 'Nuevo empleado',
+    titulo: acceso ? `Aprobar acceso: ${nombreCompleto(e)}` : id ? `Editar: ${nombreCompleto(e)}` : 'Nuevo empleado',
     ancho: 'sm:max-w-3xl',
     volver,
-    cuerpo: `<form id="f-empleado" class="space-y-6" autocomplete="off">
+    cuerpo: `${acceso ? `<div class="mb-5 rounded-xl bg-navy-50 border border-navy-100 px-4 py-3 text-sm text-navy-900">
+        <b>Verifica los datos que envió la persona</b> (nombre, cédula, fecha de nacimiento y departamento) y completa el resto del expediente.
+        Al guardar se crea el expediente y podrá entrar con <b>${esc(acceso.Email)}</b>.
+        ${acceso.Nota ? `<p class="mt-2 font-semibold text-amber-700">${esc(acceso.Nota)}</p>
+          ${/(E\d+)/.test(acceso.Nota) ? `<button type="button" data-acc="vincular-acceso" data-id="${esc(acceso.ID)}" data-emp="${esc(acceso.Nota.match(/(E\d+)/)[1])}" class="btn btn-sm mt-2 bg-white border border-navy-200 text-navy-900 hover:bg-navy-50"><i data-lucide="link" class="w-4 h-4"></i>Es la misma persona: vincular el correo a ${esc(acceso.Nota.match(/(E\d+)/)[1])}</button>` : ''}` : ''}
+      </div>` : ''}
+      <form id="f-empleado" class="space-y-6" autocomplete="off" ${acceso ? `data-acceso="${esc(acceso.ID)}"` : ''}>
       <input type="hidden" name="ID" value="${esc(e.ID || '')}">
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos personales</legend>
         <div class="grid sm:grid-cols-2 gap-4">
           ${c('Nombres', 'Nombres *', 'text', 'required')}${c('Apellidos', 'Apellidos *', 'text', 'required')}
           ${c('Cedula', 'Cédula *', 'text', 'required placeholder="V-12345678"')}${c('FechaNacimiento', 'Fecha de nacimiento', 'date')}
           ${c('Telefono', 'Teléfono', 'tel', 'placeholder="0414-0000000"')}
-          ${c('Email', 'Correo de Google (Gmail) para iniciar sesión', 'email', 'placeholder="nombre@gmail.com"')}
+          ${c('Email', 'Correo de Google (Gmail) para iniciar sesión', 'email', acceso ? 'readonly style="background:#f8fafc;color:#64748b"' : 'placeholder="nombre@gmail.com"')}
           <div class="sm:col-span-2">${c('Direccion', 'Dirección de habitación')}</div>
         </div></fieldset>
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos laborales</legend>
@@ -1314,7 +1443,7 @@ function formEmpleado(id = null) {
         </div></fieldset>
       <div><label class="etiqueta">Notas internas</label><textarea name="Notas" rows="2" class="campo">${esc(e.Notas || '')}</textarea></div>
     </form>`,
-    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-empleado" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-empleado" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>${acceso ? 'Aprobar y crear expediente' : 'Guardar'}</button>`
   });
   const form = $('#f-empleado');
   const condicionales = () => {
@@ -1331,7 +1460,16 @@ async function guardarEmpleado() {
   if (!form.reportValidity()) return;
   const datos = datosFormulario(form);
   try {
-    const r = await api('guardarEmpleado', { empleado: datos }, { texto: 'Guardando expediente…' });
+    let r;
+    if (form.dataset.acceso) {
+      const res = await api('resolverAcceso', { id: form.dataset.acceso, decision: 'Aprobada', empleado: datos }, { texto: 'Aprobando acceso…' });
+      r = res.empleado;
+      S.accesos = (S.accesos || []).filter(a => a.ID !== form.dataset.acceso);
+      pintarAccesos();
+      toast(`Acceso aprobado. ${nombreCompleto(r)} ya puede iniciar sesión.`, 'ok', 6000);
+    } else {
+      r = await api('guardarEmpleado', { empleado: datos }, { texto: 'Guardando expediente…' });
+    }
     const i = S.empleados.findIndex(e => e.ID === r.ID);
     if (i >= 0) S.empleados[i] = r; else S.empleados.push(r);
     invalidarCache();
@@ -1496,8 +1634,8 @@ function expAsistenciaGrafico({ asistencia }) {
     data: {
       labels: regs.map(a => fmtFechaCorta(a.Fecha)),
       datasets: [
-        { label: 'Hora de entrada', data: regs.map(a => +minutos(a.Entrada).toFixed(1)), borderColor: PALETA.lavanda, backgroundColor: conAlfa(PALETA.lavanda, 0.12), fill: true, pointBackgroundColor: regs.map(a => num(a.MinRetraso) > 0 ? COLORES.ausente : COLORES.aTiempo), pointBorderColor: '#fff', pointBorderWidth: 2, pointRadius: 6, tension: 0.35 },
-        { label: 'Límite (con tolerancia)', data: regs.map(() => lim), borderColor: PALETA.coral, borderDash: [6, 4], pointRadius: 0 }
+        { label: 'Hora de entrada', data: regs.map(a => +minutos(a.Entrada).toFixed(1)), borderColor: PALETA.azul, backgroundColor: conAlfa(PALETA.cian, 0.12), fill: true, pointBackgroundColor: regs.map(a => num(a.MinRetraso) > 0 ? COLORES.ausente : COLORES.aTiempo), pointBorderColor: '#fff', pointBorderWidth: 2, pointRadius: 6, tension: 0.35 },
+        { label: 'Límite (con tolerancia)', data: regs.map(() => lim), borderColor: PALETA.magenta, borderDash: [6, 4], pointRadius: 0 }
       ]
     },
     options: baseOpciones({ scales: { y: { ticks: { callback: aHora } }, x: { grid: { display: false } } }, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${aHora(c.parsed.y)}` } } } })
@@ -1897,7 +2035,7 @@ function pintarEvaluaciones() {
   });
   grafico('ch-eval-criterios', {
     type: 'radar',
-    data: { labels: CRITERIOS.map(c => c.t), datasets: [{ label: 'Promedio', data: CRITERIOS.map(c => +prom(lista.map(v => num(v[c.k]))).toFixed(1)), borderColor: PALETA.lavanda, backgroundColor: conAlfa(PALETA.lavanda, 0.22), borderWidth: 2, pointBackgroundColor: CRITERIOS.map((_, i) => colorSerie(i + 1)), pointBorderColor: '#fff', pointRadius: 6 }] },
+    data: { labels: CRITERIOS.map(c => c.t), datasets: [{ label: 'Promedio', data: CRITERIOS.map(c => +prom(lista.map(v => num(v[c.k]))).toFixed(1)), borderColor: PALETA.magenta, backgroundColor: conAlfa(PALETA.magenta, 0.16), borderWidth: 2, pointBackgroundColor: CRITERIOS.map((_, i) => colorSerie(i + 1)), pointBorderColor: '#fff', pointRadius: 6 }] },
     options: baseOpciones({ plugins: { legend: { display: false } }, scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false }, pointLabels: { font: { size: 10 } } } } })
   });
 
@@ -2045,7 +2183,12 @@ const ACC = {
   'celebrar': () => celebrar(),
   'mes-abrir': d => abrirSelectorMes(d.id),
   'mes-anio': d => pintarPopMes(d.id, Number(d.anio)),
-  'mes-elegir': d => elegirMes(d.id, d.valor)
+  'mes-elegir': d => elegirMes(d.id, d.valor),
+  'enviar-acceso': () => enviarAcceso(),
+  'revisar-acceso': () => mostrarAcceso(),
+  'revisar-solicitud-acceso': d => revisarAcceso(d.id),
+  'rechazar-acceso': d => rechazarAcceso(d.id),
+  'vincular-acceso': d => vincularAcceso(d.id, d.emp)
 };
 
 function prepararUI() {
