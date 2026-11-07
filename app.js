@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.0.0 — Fase 2)
+ *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.0.1 — Fase 2)
  * ==========================================================================
  */
 'use strict';
@@ -13,7 +13,7 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 
 /* ============================== 2. ESTADO ============================== */
 const S = {
@@ -36,13 +36,24 @@ const S = {
   cargas: 0
 };
 
-// Paleta Sumanpek: principal #C10866 · secundario #031263 · apoyo #EECF15
-const COLORES = {
-  marca: '#C10866', navy: '#031263', oro: '#EECF15',
-  aTiempo: '#031263', tarde: '#EECF15', ausente: '#C10866', justificado: '#94a3b8',
-  extra: '#031263', retraso: '#C10866',
-  serie: ['#C10866', '#031263', '#EECF15', '#5468c4', '#e66aa3', '#0891b2', '#65a30d', '#ea580c', '#7c3aed', '#475569']
+// Interfaz: principal #C10866 · secundario #031263 · apoyo #EECF15 (solo botones, menús y textos).
+// Gráficos: paleta "Taller de sublimación", 16 tonos pastel y vivos, independiente de la interfaz.
+const PALETA = {
+  lavanda: '#9883E5', aguamarina: '#50C9CE', chicle: '#F2A0B6', cielo: '#72A1E5', mostaza: '#F2C46D',
+  salvia: '#8CC7A1', terracota: '#B26E63', malva: '#7B6B90', durazno: '#F4A97F', cobalto: '#385AB6',
+  olivo: '#CEC075', coral: '#E57A8C', liquen: '#9DA9A0', berenjena: '#533961', algodon: '#FCD3DE', tinta: '#2E382E',
+  niebla: '#B4C2D0'
 };
+const COLORES = {
+  marca: '#C10866', navy: '#031263', oro: '#EECF15',                  // solo para el confeti (identidad)
+  aTiempo: PALETA.aguamarina, tarde: PALETA.mostaza, ausente: PALETA.coral, justificado: PALETA.niebla,
+  extra: PALETA.cielo, retraso: PALETA.terracota,
+  bueno: PALETA.aguamarina, medio: PALETA.mostaza, bajo: PALETA.coral,
+  serie: [PALETA.lavanda, PALETA.aguamarina, PALETA.chicle, PALETA.cielo, PALETA.mostaza, PALETA.salvia, PALETA.terracota,
+    PALETA.malva, PALETA.durazno, PALETA.cobalto, PALETA.olivo, PALETA.coral, PALETA.liquen, PALETA.berenjena, PALETA.algodon, PALETA.tinta]
+};
+const colorSerie = i => COLORES.serie[i % COLORES.serie.length];
+const conAlfa = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
 const SECCIONES = [
   { id: 'dashboard', titulo: 'Dashboard', icono: 'layout-dashboard' },
@@ -340,6 +351,9 @@ async function cargarSesion() {
   try {
     S.sesion = await api('sesion', {}, { texto: 'Iniciando sesión…' });
     entrarSegunRuta();
+    if (esRRHH() && String(S.sesion.version || '1').split('.').slice(0, 2).join('.') !== VERSION.split('.').slice(0, 2).join('.')) {
+      toast(`El servidor está en la versión ${S.sesion.version || '1.x'} y la página en la ${VERSION}. En Apps Script: Implementar → Gestionar implementaciones → ✏️ → Nueva versión.`, 'aviso', 15000);
+    }
   } catch (e) {
     if (!S.token) return; // ya se mostró el mensaje en cerrarSesion
     S.token = null;
@@ -524,6 +538,8 @@ async function enviarSolicitud() {
     await api('solicitarMarcaje', d, { texto: 'Enviando solicitud…' });
     toast('Solicitud enviada. RRHH la revisará pronto.', 'ok', 6000);
     cerrarModal();
+    invalidarCache();
+    if (esGestion()) S.sesion.solicitudesPendientes = (S.sesion.solicitudesPendientes || 0) + 1;
     cargarMisSolicitudes();
   } catch (e) { toast(e.message, 'error', 7000); }
 }
@@ -685,6 +701,7 @@ async function cargarHistorial() {
 /* ======================= 8. PANEL DE GESTIÓN ======================= */
 function mostrarAdmin() {
   const s = S.sesion;
+  invalidarCache();
   detenerReloj();
   mostrarVista('v-admin');
   document.body.classList.toggle('rol-direccion', s.rol === 'DIRECCION');
@@ -788,13 +805,14 @@ function textoPeriodo(f) {
 async function datosPeriodo(p, forzar) {
   const f = leerFiltro(p);
   const c = S.periodos[p];
-  if (forzar || !c || c.desde !== f.desde || c.hasta !== f.hasta) {
+  const vencido = !c || Date.now() - c.t > 60000;   // los datos se renuevan solos después de 1 minuto
+  if (forzar || vencido || c.desde !== f.desde || c.hasta !== f.hasta) {
     const d = await api('datosPeriodo', { desde: f.desde, hasta: f.hasta }, { texto: 'Consultando datos…' });
     S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
     S.solicitudes = d.solicitudes || [];
     actualizarInsignia(S.solicitudes.filter(x => x.Estado === 'Pendiente').length);
     S.catalogoListo = true;
-    S.periodos[p] = { desde: f.desde, hasta: f.hasta, asistencia: d.asistencia };
+    S.periodos[p] = { desde: f.desde, hasta: f.hasta, asistencia: d.asistencia, t: Date.now() };
   }
   return { f, asistencia: S.periodos[p].asistencia };
 }
@@ -1070,10 +1088,10 @@ async function cargarDashboard(forzar = false) {
     data: {
       labels: ser.labels,
       datasets: [
-        { label: 'A tiempo', data: ser.series.map(s => s.aTiempo), backgroundColor: COLORES.aTiempo, borderRadius: 4, stack: 'a' },
-        { label: 'Tarde', data: ser.series.map(s => s.tarde), backgroundColor: COLORES.tarde, borderRadius: 4, stack: 'a' },
-        { label: 'Justificado', data: ser.series.map(s => s.justificado), backgroundColor: COLORES.justificado, borderRadius: 4, stack: 'a' },
-        { label: 'Ausente', data: ser.series.map(s => s.ausente), backgroundColor: COLORES.ausente, borderRadius: 4, stack: 'a' }
+        { label: 'A tiempo', data: ser.series.map(s => s.aTiempo), backgroundColor: COLORES.aTiempo, borderRadius: 6, borderSkipped: false, stack: 'a' },
+        { label: 'Tarde', data: ser.series.map(s => s.tarde), backgroundColor: COLORES.tarde, borderRadius: 6, borderSkipped: false, stack: 'a' },
+        { label: 'Justificado', data: ser.series.map(s => s.justificado), backgroundColor: COLORES.justificado, borderRadius: 6, borderSkipped: false, stack: 'a' },
+        { label: 'Ausente', data: ser.series.map(s => s.ausente), backgroundColor: COLORES.ausente, borderRadius: 6, borderSkipped: false, stack: 'a' }
       ]
     },
     options: baseOpciones({ scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } })
@@ -1085,21 +1103,21 @@ async function cargarDashboard(forzar = false) {
   const dl = Object.keys(dist).sort((a, b) => dist[b] - dist[a]);
   grafico('ch-deptos', {
     type: 'doughnut',
-    data: { labels: dl, datasets: [{ data: dl.map(d => dist[d]), backgroundColor: dl.map((_, i) => COLORES.serie[i % COLORES.serie.length]), borderWidth: 2, borderColor: '#fff' }] },
+    data: { labels: dl, datasets: [{ data: dl.map(d => dist[d]), backgroundColor: dl.map((_, i) => colorSerie(i)), borderWidth: 3, borderColor: '#fff', hoverOffset: 10, borderRadius: 6 }] },
     options: baseOpciones({ cutout: '62%', plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8, font: { size: 11 } } } } })
   });
 
   const pd = k.porDepto.filter(d => d.n > 0);
   grafico('ch-puntualidad', {
     type: 'bar',
-    data: { labels: pd.map(d => d.depto), datasets: [{ label: 'Puntualidad %', data: pd.map(d => d.pctPuntualidad === null ? 0 : Math.round(d.pctPuntualidad)), backgroundColor: pd.map(d => (d.pctPuntualidad ?? 0) >= 90 ? COLORES.aTiempo : (d.pctPuntualidad ?? 0) >= 75 ? COLORES.tarde : COLORES.ausente), borderRadius: 6 }] },
+    data: { labels: pd.map(d => d.depto), datasets: [{ label: 'Puntualidad %', data: pd.map(d => d.pctPuntualidad === null ? 0 : Math.round(d.pctPuntualidad)), backgroundColor: pd.map((d, i) => colorSerie(i)), borderRadius: 8, borderSkipped: false }] },
     options: baseOpciones({ indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { min: 0, max: 100, ticks: { callback: v => v + '%' } }, y: { grid: { display: false } } } })
   });
   grafico('ch-extras', {
     type: 'bar',
     data: { labels: pd.map(d => d.depto), datasets: [
-      { label: 'Horas extra (netas)', data: pd.map(d => +(d.minExtra / 60).toFixed(1)), backgroundColor: COLORES.extra, borderRadius: 6 },
-      { label: 'Horas de retraso', data: pd.map(d => +(d.minRetraso / 60).toFixed(1)), backgroundColor: COLORES.retraso, borderRadius: 6 }
+      { label: 'Horas extra (netas)', data: pd.map(d => +(d.minExtra / 60).toFixed(1)), backgroundColor: COLORES.extra, borderRadius: 8, borderSkipped: false },
+      { label: 'Horas de retraso', data: pd.map(d => +(d.minRetraso / 60).toFixed(1)), backgroundColor: COLORES.retraso, borderRadius: 8, borderSkipped: false }
     ] },
     options: baseOpciones({ scales: { x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } }, y: { beginAtZero: true, ticks: { callback: v => v + ' h' } } } })
   });
@@ -1158,7 +1176,7 @@ function pintarManualesDashboard(asistencia, ids) {
   const etq = Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a]);
   grafico('ch-justif', {
     type: 'bar',
-    data: { labels: etq, datasets: [{ label: 'Marcajes', data: etq.map(j => conteo[j]), backgroundColor: etq.map((_, i) => COLORES.serie[i % COLORES.serie.length]), borderRadius: 6 }] },
+    data: { labels: etq, datasets: [{ label: 'Marcajes', data: etq.map(j => conteo[j]), backgroundColor: etq.map((_, i) => colorSerie(i + 3)), borderRadius: 8, borderSkipped: false }] },
     options: baseOpciones({ indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } })
   });
   renderTabla('dash-manuales', 't-dash-manuales', [
@@ -1478,8 +1496,8 @@ function expAsistenciaGrafico({ asistencia }) {
     data: {
       labels: regs.map(a => fmtFechaCorta(a.Fecha)),
       datasets: [
-        { label: 'Hora de entrada', data: regs.map(a => +minutos(a.Entrada).toFixed(1)), borderColor: COLORES.navy, backgroundColor: regs.map(a => num(a.MinRetraso) > 0 ? COLORES.marca : COLORES.navy), pointRadius: 5, tension: 0.25 },
-        { label: 'Límite (con tolerancia)', data: regs.map(() => lim), borderColor: COLORES.ausente, borderDash: [6, 4], pointRadius: 0 }
+        { label: 'Hora de entrada', data: regs.map(a => +minutos(a.Entrada).toFixed(1)), borderColor: PALETA.lavanda, backgroundColor: conAlfa(PALETA.lavanda, 0.12), fill: true, pointBackgroundColor: regs.map(a => num(a.MinRetraso) > 0 ? COLORES.ausente : COLORES.aTiempo), pointBorderColor: '#fff', pointBorderWidth: 2, pointRadius: 6, tension: 0.35 },
+        { label: 'Límite (con tolerancia)', data: regs.map(() => lim), borderColor: PALETA.coral, borderDash: [6, 4], pointRadius: 0 }
       ]
     },
     options: baseOpciones({ scales: { y: { ticks: { callback: aHora } }, x: { grid: { display: false } } }, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${aHora(c.parsed.y)}` } } } })
@@ -1874,12 +1892,12 @@ function pintarEvaluaciones() {
   const prom = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
   grafico('ch-eval-deptos', {
     type: 'bar',
-    data: { labels: dl, datasets: [{ label: 'Promedio', data: dl.map(d => +prom(grupos[d]).toFixed(1)), backgroundColor: dl.map(d => prom(grupos[d]) >= 85 ? COLORES.aTiempo : prom(grupos[d]) >= 70 ? '#2563eb' : prom(grupos[d]) >= 55 ? COLORES.tarde : COLORES.ausente), borderRadius: 6 }] },
+    data: { labels: dl, datasets: [{ label: 'Promedio', data: dl.map(d => +prom(grupos[d]).toFixed(1)), backgroundColor: dl.map((_, i) => colorSerie(i)), borderRadius: 8, borderSkipped: false }] },
     options: baseOpciones({ plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100 }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } })
   });
   grafico('ch-eval-criterios', {
     type: 'radar',
-    data: { labels: CRITERIOS.map(c => c.t), datasets: [{ label: 'Promedio', data: CRITERIOS.map(c => +prom(lista.map(v => num(v[c.k]))).toFixed(1)), borderColor: COLORES.aTiempo, backgroundColor: 'rgba(13,148,136,.18)', pointBackgroundColor: COLORES.aTiempo }] },
+    data: { labels: CRITERIOS.map(c => c.t), datasets: [{ label: 'Promedio', data: CRITERIOS.map(c => +prom(lista.map(v => num(v[c.k]))).toFixed(1)), borderColor: PALETA.lavanda, backgroundColor: conAlfa(PALETA.lavanda, 0.22), borderWidth: 2, pointBackgroundColor: CRITERIOS.map((_, i) => colorSerie(i + 1)), pointBorderColor: '#fff', pointRadius: 6 }] },
     options: baseOpciones({ plugins: { legend: { display: false } }, scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false }, pointLabels: { font: { size: 10 } } } } })
   });
 
