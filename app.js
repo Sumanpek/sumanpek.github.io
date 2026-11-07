@@ -10,7 +10,7 @@ const CONFIG = {
   // URL de la Aplicación web de Apps Script (termina en /exec)
   API_URL: 'https://script.google.com/macros/s/AKfycbwFH9lbNFbZ1c1sh5ZKhybVct3upDndjOZJLuIQmaMDSAk0MZuy1z58VVJJlTMnt7hD6A/exec',
   // ID de cliente OAuth de Google Cloud (termina en .apps.googleusercontent.com)
-  GOOGLE_CLIENT_ID: 'http://110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com/'
+  GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
 /* ============================== 2. ESTADO ============================== */
