@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.1.0 — Fase 2)
+ *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.2.0 — Fase 2)
  * ==========================================================================
  */
 'use strict';
@@ -13,7 +13,7 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 
 /* ============================== 2. ESTADO ============================== */
 const S = {
@@ -71,6 +71,21 @@ const TIPOS_DOCUMENTO = ['Currículum', 'Cédula de identidad', 'RIF', 'Test psi
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DIAS_SEMANA = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados', 'domingos'];
 const TIPO_OTRO = 'Otro (justifique)';
+
+/** Campo de cédula con selector V / E. Devuelve HTML; los valores llegan como TipoDocumento + Cedula (solo números). */
+function campoCedulaHTML(valor = '', { requerido = true } = {}) {
+  const txt = String(valor || '').toUpperCase();
+  const tipo = /^\s*E/.test(txt) ? 'E' : 'V';
+  const numero = txt.replace(/\D/g, '');
+  return `<div><label class="etiqueta">Cédula ${requerido ? '*' : ''}</label>
+    <div class="flex gap-2">
+      <select name="TipoDocumento" class="campo !w-20 shrink-0" title="V = venezolano · E = extranjero">
+        <option value="V" ${tipo === 'V' ? 'selected' : ''}>V-</option><option value="E" ${tipo === 'E' ? 'selected' : ''}>E-</option>
+      </select>
+      <input name="Cedula" class="campo min-w-0" inputmode="numeric" pattern="\\d{5,10}" maxlength="10" ${requerido ? 'required' : ''}
+        value="${esc(numero)}" placeholder="12345678" title="Solo números, sin puntos" oninput="this.value=this.value.replace(/\\D/g,'')">
+    </div></div>`;
+}
 const vacioOpc = t => ({ v: '', t });
 const OPC = {
   sangre: [vacioOpc('—'), 'O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'No sabe'],
@@ -412,8 +427,8 @@ async function mostrarAcceso() {
         <div><label class="etiqueta">Nombres *</label><input name="Nombres" class="campo" required maxlength="60" autocomplete="given-name"></div>
         <div><label class="etiqueta">Apellidos *</label><input name="Apellidos" class="campo" required maxlength="60" autocomplete="family-name"></div>
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div><label class="etiqueta">Cédula *</label><input name="Cedula" class="campo" required maxlength="15" placeholder="V-12345678"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        ${campoCedulaHTML('')}
         <div><label class="etiqueta">Fecha de nacimiento *</label><input name="FechaNacimiento" type="date" class="campo" required max="${hoyStr()}"></div>
       </div>
       <div><label class="etiqueta">Departamento *</label><select name="Departamento" class="campo" required>${deptos}</select></div>
@@ -1229,7 +1244,7 @@ async function cargarDashboard(forzar = false) {
 const esManual = a => a.Origen && a.Origen !== 'GPS';
 function insigniaJustificativo(a) {
   if (!esManual(a)) return '<span class="text-slate-300">—</span>';
-  const j = a.Justificativo || 'Sin justificativo';
+  const j = a.Justificativo || 'Sin justificativo (registro antiguo)';
   const clip = a.SoporteFileID ? `<button data-acc="ver-soporte" data-id="${esc(a.ID)}" class="ml-1 text-navy-700 hover:text-marca-700" title="Ver soporte"><i data-lucide="paperclip" class="w-4 h-4 inline"></i></button>` : '';
   return `<span class="insignia bg-oro-100 text-oro-700" title="${esc(a.Observacion || '')}">${esc(j)}</span>${clip}`;
 }
@@ -1239,7 +1254,7 @@ function pintarManualesDashboard(asistencia, ids) {
     .map(a => Object.assign({ _e: empPorId(a.EmpleadoID) || { Nombres: a.Email, Apellidos: '' } }, a))
     .sort((a, b) => a.Fecha < b.Fecha ? 1 : -1);
   const conteo = {};
-  lista.forEach(a => { const j = a.Justificativo || 'Sin justificativo'; conteo[j] = (conteo[j] || 0) + 1; });
+  lista.forEach(a => { const j = a.Justificativo || 'Sin justificativo (registro antiguo)'; conteo[j] = (conteo[j] || 0) + 1; });
   const etq = Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a]);
   grafico('ch-justif', {
     type: 'bar',
@@ -1407,14 +1422,15 @@ function formEmpleado(id = null, { acceso = null, base = {} } = {}) {
         <b>Verifica los datos que envió la persona</b> (nombre, cédula, fecha de nacimiento y departamento) y completa el resto del expediente.
         Al guardar se crea el expediente y podrá entrar con <b>${esc(acceso.Email)}</b>.
         ${acceso.Nota ? `<p class="mt-2 font-semibold text-amber-700">${esc(acceso.Nota)}</p>
-          ${/(E\d+)/.test(acceso.Nota) ? `<button type="button" data-acc="vincular-acceso" data-id="${esc(acceso.ID)}" data-emp="${esc(acceso.Nota.match(/(E\d+)/)[1])}" class="btn btn-sm mt-2 bg-white border border-navy-200 text-navy-900 hover:bg-navy-50"><i data-lucide="link" class="w-4 h-4"></i>Es la misma persona: vincular el correo a ${esc(acceso.Nota.match(/(E\d+)/)[1])}</button>` : ''}` : ''}
+          ${/(E\d+)/.test(acceso.Nota) && /sin correo\)$/.test(acceso.Nota) ? `<button type="button" data-acc="vincular-acceso" data-id="${esc(acceso.ID)}" data-emp="${esc(acceso.Nota.match(/(E\d+)/)[1])}" class="btn btn-sm mt-2 bg-white border border-navy-200 text-navy-900 hover:bg-navy-50"><i data-lucide="link" class="w-4 h-4"></i>Es la misma persona: vincular el correo a ${esc(acceso.Nota.match(/(E\d+)/)[1])}</button>`
+            : '<p class="mt-1 text-xs text-amber-700">Ese expediente ya tiene su propio correo. Si es la misma persona, lo correcto es <b>rechazar</b> esta solicitud indicándole qué correo usar.</p>'}` : ''}
       </div>` : ''}
       <form id="f-empleado" class="space-y-6" autocomplete="off" ${acceso ? `data-acceso="${esc(acceso.ID)}"` : ''}>
       <input type="hidden" name="ID" value="${esc(e.ID || '')}">
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos personales</legend>
         <div class="grid sm:grid-cols-2 gap-4">
           ${c('Nombres', 'Nombres *', 'text', 'required')}${c('Apellidos', 'Apellidos *', 'text', 'required')}
-          ${c('Cedula', 'Cédula *', 'text', 'required placeholder="V-12345678"')}${c('FechaNacimiento', 'Fecha de nacimiento', 'date')}
+          ${campoCedulaHTML(e.Cedula)}${c('FechaNacimiento', 'Fecha de nacimiento', 'date')}
           ${c('Telefono', 'Teléfono', 'tel', 'placeholder="0414-0000000"')}
           ${c('Email', 'Correo de Google (Gmail) para iniciar sesión', 'email', acceso ? 'readonly style="background:#f8fafc;color:#64748b"' : 'placeholder="nombre@gmail.com"')}
           <div class="sm:col-span-2">${c('Direccion', 'Dirección de habitación')}</div>
