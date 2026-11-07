@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v1.0.0 — Fase 1 — 6 de noviembre 10:45 pm)
+ *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v1.0.1 — Fase 1 — 6 de noviembre 11:02 pm)
  * ==========================================================================
  */
 'use strict';
