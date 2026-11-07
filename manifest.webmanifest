@@ -1,0 +1,15 @@
+{
+  "name": "Sumanpek · Sistema de Asistencia",
+  "short_name": "Sumanpek",
+  "description": "Marcaje de asistencia y gestión de RRHH de Sumanpek, C.A.",
+  "start_url": "./#/asistencia",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#031263",
+  "lang": "es-VE",
+  "icons": [
+    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

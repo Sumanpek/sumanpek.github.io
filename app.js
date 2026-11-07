@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v1.0.1 — Fase 1 — 6 de noviembre 11:02 pm)
+ *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.0.0 — Fase 2)
  * ==========================================================================
  */
 'use strict';
@@ -13,8 +13,12 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
+const VERSION = '2.0.0';
+
 /* ============================== 2. ESTADO ============================== */
 const S = {
+  solicitudes: [],
+  audio: null,
   token: null,
   sesion: null,
   empleados: [],
@@ -32,9 +36,12 @@ const S = {
   cargas: 0
 };
 
+// Paleta Sumanpek: principal #C10866 · secundario #031263 · apoyo #EECF15
 const COLORES = {
-  aTiempo: '#0d9488', tarde: '#f59e0b', ausente: '#e11d48', justificado: '#94a3b8',
-  serie: ['#0f766e', '#2563eb', '#f59e0b', '#e11d48', '#7c3aed', '#0891b2', '#65a30d', '#db2777', '#475569', '#ea580c']
+  marca: '#C10866', navy: '#031263', oro: '#EECF15',
+  aTiempo: '#031263', tarde: '#EECF15', ausente: '#C10866', justificado: '#94a3b8',
+  extra: '#031263', retraso: '#C10866',
+  serie: ['#C10866', '#031263', '#EECF15', '#5468c4', '#e66aa3', '#0891b2', '#65a30d', '#ea580c', '#7c3aed', '#475569']
 };
 
 const SECCIONES = [
@@ -48,7 +55,18 @@ const SECCIONES = [
 
 const TIPOS_DOCUMENTO = ['Currículum', 'Cédula de identidad', 'RIF', 'Test psicotécnico', 'Contrato de trabajo',
   'Amonestación', 'Constancia de trabajo', 'Certificado médico / Reposo', 'Título o certificación',
-  'Referencias', 'Evaluación firmada', 'Carta de renuncia / despido', 'Otro'];
+  'Referencias', 'Evaluación firmada', 'Carta de renuncia / despido', 'Soporte de marcaje', 'Otro'];
+
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const DIAS_SEMANA = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados', 'domingos'];
+const TIPO_OTRO = 'Otro (justifique)';
+const vacioOpc = t => ({ v: '', t });
+const OPC = {
+  sangre: [vacioOpc('—'), 'O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'No sabe'],
+  civil: [vacioOpc('—'), 'Soltero(a)', 'Casado(a)', 'Unión estable de hecho', 'Divorciado(a)', 'Viudo(a)'],
+  instruccion: [vacioOpc('—'), 'Primaria', 'Bachiller', 'Técnico medio', 'TSU', 'Universitario', 'Postgrado'],
+  camisa: [vacioOpc('—'), 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
+};
 
 const CRITERIOS = [
   { k: 'Metas', t: 'Cumplimiento de metas' },
@@ -83,6 +101,9 @@ const minutos = h => { if (!h) return 0; const [a, b, c] = String(h).split(':').
 const nombreCompleto = e => e ? `${e.Nombres || ''} ${e.Apellidos || ''}`.trim() : '—';
 const iniciales = t => String(t || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('') || '?';
 const normalizar = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const esMovil = () => window.matchMedia('(max-width: 1023px)').matches;
+/** Cuántas veces cae un día de la semana (1=lun … 7=dom) en el mes de una fecha. */
+const diasEnMes = (fecha, dia) => { const d = aFecha(fecha); const ult = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); let n = 0; for (let i = 1; i <= ult; i++) { const x = new Date(d.getFullYear(), d.getMonth(), i).getDay(); if ((x === 0 ? 7 : x) === dia) n++; } return n; };
 const coincide = (e, q) => !q || normalizar([nombreCompleto(e), e.Cedula, e.Cargo, e.Email, e.ID, e.Departamento].join(' ')).includes(normalizar(q));
 const empPorId = id => S.empleados.find(e => e.ID === id);
 const esRRHH = () => S.sesion?.rol === 'RRHH';
@@ -157,13 +178,14 @@ function cancelarModal() {
   if (volver) { S.modalVolver = null; volver(); } else cerrarModal();
 }
 
-function confirmar(mensaje, { titulo = 'Confirmar', boton = 'Eliminar', peligro = true } = {}) {
+function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', peligro = false, conTexto = false, placeholder = '' } = {}) {
   return new Promise(resolve => {
     const capa = document.createElement('div');
     capa.className = 'confirmacion fixed inset-0 z-[95] flex items-center justify-center p-4 bg-slate-900/50';
     capa.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <h4 class="font-bold text-lg mb-2">${esc(titulo)}</h4>
-        <p class="text-sm text-slate-600 mb-6">${esc(mensaje)}</p>
+        <p class="text-sm text-slate-600 ${conTexto ? 'mb-3' : 'mb-6'}">${esc(mensaje)}</p>
+        ${conTexto ? `<textarea rows="3" class="campo mb-5" placeholder="${esc(placeholder)}"></textarea>` : ''}
         <div class="flex justify-end gap-2">
           <button class="btn-sec" data-r="0">Cancelar</button>
           <button class="${peligro ? 'btn-peligro' : 'btn-primario'}" data-r="1">${esc(boton)}</button>
@@ -172,12 +194,16 @@ function confirmar(mensaje, { titulo = 'Confirmar', boton = 'Eliminar', peligro 
       const b = ev.target.closest('[data-r]');
       if (!b) return;
       ev.stopPropagation();
+      const texto = conTexto ? capa.querySelector('textarea').value.trim() : '';
+      if (b.dataset.r === '1' && conTexto && !texto) { capa.querySelector('textarea').focus(); return; }
       capa.remove();
-      resolve(b.dataset.r === '1');
+      resolve(b.dataset.r === '1' ? (conTexto ? texto : true) : (conTexto ? null : false));
     });
     document.body.appendChild(capa);
+    if (conTexto) setTimeout(() => capa.querySelector('textarea').focus(), 50);
   });
 }
+const confirmar = (mensaje, { titulo = 'Confirmar', boton = 'Eliminar', peligro = true } = {}) => dialogo({ titulo, mensaje, boton, peligro });
 
 function opciones(lista, seleccionado = '', vacio = null) {
   return (vacio !== null ? `<option value="">${esc(vacio)}</option>` : '') +
@@ -191,14 +217,15 @@ function insigniaEstado(estado) {
   const c = {
     Activo: 'bg-emerald-100 text-emerald-700', Inactivo: 'bg-slate-200 text-slate-600', Reposo: 'bg-rose-100 text-rose-700',
     Permiso: 'bg-amber-100 text-amber-700', Vacaciones: 'bg-sky-100 text-sky-700',
-    Aprobado: 'bg-emerald-100 text-emerald-700', Pendiente: 'bg-amber-100 text-amber-700', Rechazado: 'bg-rose-100 text-rose-700'
+    Aprobado: 'bg-emerald-100 text-emerald-700', Pendiente: 'bg-amber-100 text-amber-700', Rechazado: 'bg-rose-100 text-rose-700',
+    Aprobada: 'bg-emerald-100 text-emerald-700', Rechazada: 'bg-rose-100 text-rose-700'
   }[estado] || 'bg-slate-100 text-slate-600';
   return `<span class="insignia ${c}">${esc(estado || '—')}</span>`;
 }
 
 function colorPuntaje(v) {
   if (v === null || v === undefined || !isFinite(v)) return 'text-slate-400';
-  return v >= 85 ? 'text-emerald-600' : v >= 70 ? 'text-marca-700' : v >= 55 ? 'text-amber-600' : 'text-rose-600';
+  return v >= 85 ? 'text-emerald-600' : v >= 70 ? 'text-navy-600' : v >= 55 ? 'text-amber-600' : 'text-rose-600';
 }
 
 function datosFormulario(form) {
@@ -296,10 +323,23 @@ async function alRecibirCredencial(token) {
   await cargarSesion();
 }
 
+/* ---------- Rutas: #/asistencia (marcaje) y #/gestion/<sección> ---------- */
+function rutaHash() {
+  const [a = '', b = ''] = location.hash.replace(/^#\/?/, '').split('/');
+  return { a, b };
+}
+function fijarHash(h) { if (location.hash !== h) history.replaceState(null, '', h); }
+function entrarSegunRuta() {
+  const r = rutaHash();
+  if (!esGestion() || r.a === 'asistencia') return mostrarMarcaje();
+  if (r.a === 'gestion') { if (r.b) S.seccion = r.b; return mostrarAdmin(); }
+  return esMovil() ? mostrarMarcaje() : mostrarAdmin();   // en el celular, directivos entran al marcaje
+}
+
 async function cargarSesion() {
   try {
     S.sesion = await api('sesion', {}, { texto: 'Iniciando sesión…' });
-    if (esGestion()) mostrarAdmin(); else mostrarMarcaje();
+    entrarSegunRuta();
   } catch (e) {
     if (!S.token) return; // ya se mostró el mensaje en cerrarSesion
     S.token = null;
@@ -322,16 +362,189 @@ function cerrarSesion(msg = '') {
 function mostrarMarcaje() {
   const s = S.sesion;
   mostrarVista('v-marcaje');
+  fijarHash('#/asistencia');
   $('#mc-nombre').textContent = s.nombre;
   $('#mc-cargo').textContent = [s.cargo, s.departamento].filter(Boolean).join(' · ') || s.email;
   $('#mc-avatar').textContent = iniciales(s.nombre);
   $('#mc-volver').classList.toggle('hidden', !esGestion());
   $('#mc-horario').textContent = `${s.horario.entrada} – ${s.horario.salida} · sáb. hasta ${s.horario.salidaSabado}`;
+  $('#mc-dias-max').textContent = s.diasMaxManual;
+  $('#mc-solicitar').classList.toggle('hidden', !s.empleadoId);
   pintarEstadoMarcaje();
+  pintarCumple();
   iniciarReloj();
   cargarHistorial();
+  cargarMisSolicitudes();
   if (s.empleadoId) verificarUbicacion(true);
   iconos();
+}
+
+/* ---------- Cumpleaños: confeti + fanfarria ---------- */
+function pintarCumple() {
+  const s = S.sesion, el = $('#mc-cumple');
+  const otros = (s.cumpleanerosHoy || []).filter(c => c.id !== s.empleadoId);
+  let html = '';
+  if (s.cumpleanos) {
+    html += `<div class="tarjeta p-5 text-center shadow-lg border-oro-300 bg-gradient-to-br from-oro-50 via-white to-marca-50">
+      <p class="text-4xl mb-1">🎂</p>
+      <p class="text-xl font-extrabold text-marca-700">¡Feliz cumpleaños, ${esc(String(s.nombre).split(' ')[0])}!</p>
+      <p class="text-sm text-slate-600 mt-1">Todo el equipo de Sumanpek te desea un día extraordinario.</p>
+      <button data-acc="celebrar" class="btn btn-sm mt-3 bg-navy-900 text-white hover:bg-navy-950">🎉 ¡Celebrar!</button></div>`;
+  }
+  if (otros.length) {
+    html += `<div class="tarjeta px-4 py-3 flex items-center gap-3 bg-oro-50 border-oro-200">
+      <span class="text-2xl">🎈</span><p class="text-sm text-slate-700">Hoy ${otros.length === 1 ? 'cumple' : 'cumplen'} años: <b>${otros.map(o => esc(o.nombre)).join(', ')}</b>. ¡Felicítalos!</p></div>`;
+  }
+  el.innerHTML = html;
+  el.className = html ? 'space-y-3' : 'hidden';
+  let celebrado = false;
+  try { celebrado = sessionStorage.getItem('aa_cumple') === s.hoy; sessionStorage.setItem('aa_cumple', s.hoy); } catch (e) { /* nada */ }
+  if (s.cumpleanos && !celebrado) setTimeout(() => celebrar(), 700);
+}
+
+function celebrar() { lanzarConfeti(); fanfarria(); }
+
+function lanzarConfeti(ms = 4500) {
+  const cv = $('#confeti'), ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
+  const W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr;
+  const colores = [COLORES.marca, COLORES.navy, COLORES.oro, '#e66aa3', '#5468c4'];
+  const ps = Array.from({ length: 170 }, (_, i) => ({
+    x: Math.random() * W, y: -Math.random() * H * 0.6, w: (6 + Math.random() * 7) * dpr, h: (9 + Math.random() * 9) * dpr,
+    vx: (Math.random() - 0.5) * 3 * dpr, vy: (2 + Math.random() * 3) * dpr, r: Math.random() * 6.3, vr: (Math.random() - 0.5) * 0.3, c: colores[i % colores.length]
+  }));
+  const t0 = performance.now();
+  (function paso(t) {
+    ctx.clearRect(0, 0, W, H);
+    ps.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.04 * dpr; p.r += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.r))); ctx.restore();
+    });
+    if (t - t0 < ms) requestAnimationFrame(paso); else ctx.clearRect(0, 0, W, H);
+  })(t0);
+}
+
+/** Fanfarria corta sintetizada con Web Audio (sin archivos de sonido). */
+function fanfarria() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ac = S.audio || (S.audio = new AC());
+    if (ac.state === 'suspended') ac.resume();
+    const t0 = ac.currentTime + 0.05;
+    const C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.5, D5 = 587.33;
+    const notas = [[C5, 0, 0.13], [C5, 0.15, 0.13], [C5, 0.3, 0.13], [E5, 0.45, 0.35], [D5, 0.85, 0.13], [E5, 1.0, 0.13],
+      [C5, 1.2, 1.1], [E5, 1.2, 1.1], [G5, 1.2, 1.1], [C6, 1.2, 1.1]];
+    notas.forEach(([f, ini, dur]) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + ini);
+      g.gain.linearRampToValueAtTime(0.16, t0 + ini + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + ini + dur);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t0 + ini); o.stop(t0 + ini + dur + 0.05);
+    });
+  } catch (e) { /* sin audio */ }
+}
+
+/* ---------- Solicitudes de marcaje manual (empleado) ---------- */
+async function comprimirImagen(file, max = 1600, calidad = 0.82) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    if (k === 1 && file.size < 1.5e6) return file;
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', calidad));
+    return blob ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+  } catch (e) { return file; } finally { URL.revokeObjectURL(url); }
+}
+
+async function archivoParaEnviar(file) {
+  if (!file) return null;
+  const f = await comprimirImagen(file);
+  const maxMB = num(S.sesion.tamanoMaxMB) || 10;
+  if (f.size > maxMB * 1024 * 1024) throw new Error(`El archivo pesa ${fmtTamano(f.size)}. El máximo es ${maxMB} MB.`);
+  return { nombre: f.name, mimeType: f.type || 'application/octet-stream', base64: await leerBase64(f) };
+}
+
+function camposMarcajeHTML({ conModo = true, min = '', fecha = '', entrada = '', salida = '', justificativo = '', detalle = '', etiquetaDetalle = 'Detalle' } = {}) {
+  const radio = (v, t, chk) => `<label class="cursor-pointer"><input type="radio" name="modo" value="${v}" class="peer sr-only" ${chk ? 'checked' : ''}>
+    <span class="block text-center rounded-xl border border-slate-300 px-2 py-2.5 text-xs font-semibold text-slate-600 peer-checked:bg-navy-900 peer-checked:text-white peer-checked:border-navy-900">${t}</span></label>`;
+  return `
+    <div><label class="etiqueta">Fecha *</label><input name="fecha" type="date" class="campo" required ${min ? `min="${min}"` : ''} max="${hoyStr()}" value="${esc(fecha)}">
+      ${min ? `<p class="text-xs text-slate-400 mt-1">Puedes elegir desde el ${fmtFecha(min)} hasta hoy.</p>` : ''}</div>
+    ${conModo ? `<div><label class="etiqueta">¿Qué necesitas registrar? *</label><div class="grid grid-cols-3 gap-2">
+      ${radio('ambos', 'Entrada y salida', true)}${radio('entrada', 'Solo entrada', false)}${radio('salida', 'Solo salida', false)}</div></div>` : ''}
+    <div class="grid grid-cols-2 gap-3">
+      <div data-campo="entrada"><label class="etiqueta">Hora de entrada *</label><input name="entrada" type="time" class="campo" value="${esc(entrada)}"></div>
+      <div data-campo="salida"><label class="etiqueta">Hora de salida${conModo ? ' *' : ''}</label><input name="salida" type="time" class="campo" value="${esc(salida)}"></div>
+    </div>
+    <div><label class="etiqueta">Justificativo *</label><select name="justificativo" class="campo" required>${opciones(S.sesion.justificativos, justificativo, 'Selecciona…')}</select></div>
+    <div><label class="etiqueta">${esc(etiquetaDetalle)}</label><textarea name="detalle" rows="2" maxlength="500" class="campo" placeholder="Ej.: Estuve haciendo una instalación en el cliente desde las 8:00.">${esc(detalle)}</textarea></div>
+    <div><label class="etiqueta">Soporte (opcional): foto o PDF</label>
+      <input name="archivo" type="file" accept="image/*,application/pdf" class="campo file:mr-3 file:rounded-lg file:border-0 file:bg-marca-50 file:px-3 file:py-1 file:text-marca-700 file:font-semibold">
+      <p class="text-xs text-slate-400 mt-1">Puedes tomar una foto con la cámara. Las fotos se reducen automáticamente.</p></div>`;
+}
+
+function formSolicitud() {
+  const s = S.sesion, hoy = hoyStr(), min = sumarDias(hoy, -s.diasMaxManual);
+  abrirModal({
+    titulo: 'Solicitar marcaje manual',
+    cuerpo: `<form id="f-solicitud" class="space-y-4">${camposMarcajeHTML({ min, fecha: sumarDias(hoy, -1) })}
+      <p class="text-xs text-slate-500 bg-slate-50 rounded-xl p-3">Tu solicitud quedará <b>pendiente</b> hasta que Recursos Humanos la apruebe. Solo se aceptan fechas y horas pasadas.</p></form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="enviar-solicitud" class="btn-primario"><i data-lucide="send" class="w-4 h-4"></i>Enviar solicitud</button>`
+  });
+  const form = $('#f-solicitud');
+  const modo = () => {
+    const m = form.querySelector('[name=modo]:checked').value;
+    $('[data-campo=entrada]', form).classList.toggle('hidden', m === 'salida');
+    $('[data-campo=salida]', form).classList.toggle('hidden', m === 'entrada');
+    form.entrada.required = m !== 'salida';
+    form.salida.required = m !== 'entrada';
+  };
+  $$('[name=modo]', form).forEach(r => r.addEventListener('change', modo));
+  modo();
+}
+
+async function enviarSolicitud() {
+  const form = $('#f-solicitud');
+  if (!form.reportValidity()) return;
+  const m = form.querySelector('[name=modo]:checked').value;
+  const d = { fecha: form.fecha.value, justificativo: form.justificativo.value, detalle: form.detalle.value.trim(),
+    entrada: m !== 'salida' ? form.entrada.value : '', salida: m !== 'entrada' ? form.salida.value : '' };
+  const ahora = new Date(), minAhora = ahora.getHours() * 60 + ahora.getMinutes();
+  if (d.fecha === hoyStr() && [d.entrada, d.salida].some(h => h && minutos(h) > minAhora)) return toast('Solo puedes registrar horas que ya pasaron.', 'aviso');
+  if (d.entrada && d.salida && minutos(d.salida) <= minutos(d.entrada)) return toast('La salida debe ser posterior a la entrada.', 'aviso');
+  try {
+    cargando(true, 'Preparando soporte…');
+    try { d.archivo = await archivoParaEnviar(form.archivo.files[0]); } finally { cargando(false); }
+    await api('solicitarMarcaje', d, { texto: 'Enviando solicitud…' });
+    toast('Solicitud enviada. RRHH la revisará pronto.', 'ok', 6000);
+    cerrarModal();
+    cargarMisSolicitudes();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+async function cargarMisSolicitudes() {
+  if (!S.sesion?.empleadoId) { $('#mc-solicitudes-tarjeta').classList.add('hidden'); return; }
+  try {
+    const l = await api('misSolicitudes', {}, { silencioso: true });
+    $('#mc-solicitudes-tarjeta').classList.toggle('hidden', !l.length);
+    $('#mc-solicitudes').innerHTML = l.map(x => `
+      <div class="px-5 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold cap1">${esc(fmtFechaCorta(x.Fecha))}</p>
+            <p class="text-xs text-slate-500">${x.Entrada ? fmtHora(x.Entrada) : '—'} → ${x.Salida ? fmtHora(x.Salida) : '—'} · ${esc(x.Justificativo)}${x.TieneSoporte ? ' · 📎' : ''}</p>
+          </div>
+          ${insigniaEstado(x.Estado)}
+        </div>
+        ${x.ComentarioRevision ? `<p class="text-xs mt-1.5 rounded-lg px-2.5 py-1.5 ${x.Estado === 'Rechazada' ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-600'}">RRHH: ${esc(x.ComentarioRevision)}</p>` : ''}
+      </div>`).join('');
+  } catch (e) { /* silencioso */ }
 }
 
 function iniciarReloj() {
@@ -460,7 +673,7 @@ async function cargarHistorial() {
       <div class="px-5 py-3 flex items-center justify-between gap-3">
         <div>
           <p class="text-sm font-semibold cap1">${esc(fmtFechaCorta(a.Fecha))}</p>
-          <p class="text-xs text-slate-500">${fmtHora(a.Entrada)} → ${fmtHora(a.Salida)}${a.MinTrabajados ? ' · ' + fmtMin(a.MinTrabajados) : ''}${a.Origen === 'MANUAL' ? ' · manual' : ''}</p>
+          <p class="text-xs text-slate-500">${fmtHora(a.Entrada)} → ${fmtHora(a.Salida)}${a.MinTrabajados ? ' · ' + fmtMin(a.MinTrabajados) : ''}${a.Origen && a.Origen !== 'GPS' ? ' · ' + esc(a.Justificativo || 'manual') : ''}</p>
         </div>
         ${num(a.MinRetraso) > 0 ? `<span class="insignia bg-amber-100 text-amber-700">+${Math.round(num(a.MinRetraso))} min</span>` : '<span class="insignia bg-emerald-100 text-emerald-700">A tiempo</span>'}
       </div>`).join('');
@@ -487,20 +700,26 @@ function mostrarAdmin() {
   $('#emp-estado').innerHTML = opciones(s.catalogos.estados, '', 'Todos los estados');
   $('#per-tipo').innerHTML = opciones(s.catalogos.tiposPermiso, '', 'Todos los tipos');
   $('#per-estado').innerHTML = opciones(s.catalogos.estadosPermiso, '', 'Todos los estados');
+  actualizarInsignia(s.solicitudesPendientes || 0);
   navegar(S.seccion === 'mi-marcaje' ? 'dashboard' : S.seccion);
 }
 
 function construirNavegacion() {
   $('#nav-lateral').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${s.id === 'asistencia' ? '<span data-insignia class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>' : ''}</button>`).join('');
   $('#nav-movil-items').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${s.id === 'asistencia' ? '<span data-insignia class="hidden insignia bg-oro-400 text-navy-950">0</span>' : ''}</button>`).join('');
+}
+
+function actualizarInsignia(n) {
+  $$('[data-insignia]').forEach(b => { b.textContent = n; b.classList.toggle('hidden', !n); });
 }
 
 function navegar(sec) {
   if (sec === 'mi-marcaje') { S.seccion = 'mi-marcaje'; mostrarMarcaje(); return; }
   if (!$('#s-' + sec)) sec = 'dashboard';
   S.seccion = sec;
+  fijarHash('#/gestion/' + sec);
   if ($('#v-admin').classList.contains('hidden')) { mostrarVista('v-admin'); detenerReloj(); }
   $$('.seccion').forEach(x => x.classList.toggle('hidden', x.id !== 's-' + sec));
   $$('[data-acc="nav"]').forEach(b => b.classList.toggle('activo', b.dataset.sec === sec));
@@ -572,6 +791,8 @@ async function datosPeriodo(p, forzar) {
   if (forzar || !c || c.desde !== f.desde || c.hasta !== f.hasta) {
     const d = await api('datosPeriodo', { desde: f.desde, hasta: f.hasta }, { texto: 'Consultando datos…' });
     S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
+    S.solicitudes = d.solicitudes || [];
+    actualizarInsignia(S.solicitudes.filter(x => x.Estado === 'Pendiente').length);
     S.catalogoListo = true;
     S.periodos[p] = { desde: f.desde, hasta: f.hasta, asistencia: d.asistencia };
   }
@@ -583,6 +804,7 @@ async function asegurarCatalogo(forzar = false) {
   const h = hoyStr();
   const d = await api('datosPeriodo', { desde: h, hasta: h }, { texto: 'Cargando…' });
   S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
+  S.solicitudes = d.solicitudes || [];
   S.catalogoListo = true;
 }
 
@@ -818,7 +1040,11 @@ async function cargarDashboard(forzar = false) {
   const activos = emps.filter(e => e.Estado !== 'Inactivo');
   const ausentesHoy = activos.filter(e => ['Vacaciones', 'Reposo', 'Permiso'].includes(e.Estado) ||
     S.permisos.some(p => p.EmpleadoID === e.ID && p.Estado === 'Aprobado' && p.FechaInicio <= hoy && p.FechaFin >= hoy)).length;
-  const nomina = activos.reduce((s, e) => s + num(e.Salario), 0);
+  const semanal = activos.reduce((s, e) => s + num(e.SalarioSemanal), 0);
+  const diaPago = S.sesion.diaPago || 6;
+  const semanasMes = diasEnMes(f.hasta, diaPago);
+  const nomina = semanal * semanasMes;
+  const nombreMes = aFecha(f.hasta).toLocaleDateString('es-VE', { month: 'long' });
   const empsRot = S.empleados.filter(e => (!f.depto || e.Departamento === f.depto) && coincide(e, f.q));
   const rot = rotacion(empsRot, f.desde, f.hasta);
 
@@ -830,9 +1056,9 @@ async function cargarDashboard(forzar = false) {
     tarjetaKPI('user-check', 'Asistencia', fmtPct(t.pctAsistencia), `${t.asistidosLab} de ${Math.max(0, t.esperados - t.justificados)} jornadas esperadas`, 'verde'),
     tarjetaKPI('timer', 'Puntualidad', fmtPct(t.pctPuntualidad), `${t.tardes} llegada${t.tardes === 1 ? '' : 's'} tarde · ${fmtMin(t.minRetraso)}`, 'ambar'),
     tarjetaKPI('user-x', 'Ausencias injustificadas', t.ausencias, `${t.justificados} justificadas${t.pendientes ? ` · ${t.pendientes} sin marcar aún hoy` : ''}`, 'rosa'),
-    tarjetaKPI('hourglass', 'Horas extra', fmtHoras(t.minExtra), `${t.conExtra} empleado${t.conExtra === 1 ? '' : 's'} con horas extra`, 'violeta'),
+    tarjetaKPI('hourglass', 'Horas extra (netas)', fmtHoras(t.minExtra), `${t.conExtra} empleado${t.conExtra === 1 ? '' : 's'} · ${fmtHoras(t.minRetraso)} de retraso acumulado`, 'violeta'),
     tarjetaKPI('clock', 'Horas trabajadas', fmtHoras(t.minTrabajados), `${t.asistidos ? fmtHoras(t.minTrabajados / t.asistidos) : '0 h'} promedio por jornada${t.sinSalida ? ` · ${t.sinSalida} sin salida` : ''}`, 'azul'),
-    tarjetaKPI('wallet', 'Nómina mensual estimada', fmtDinero(nomina), `Suma de salarios de ${activos.length} activos`, 'gris'),
+    tarjetaKPI('wallet', `Nómina estimada · ${nombreMes}`, fmtDinero(nomina), `${semanasMes} ${DIAS_SEMANA[diaPago]} × ${fmtDinero(semanal)} semanales`, 'gris'),
     tarjetaKPI('trending-up', 'Rotación', fmtPct(rot.pct), `${rot.ingresos} ingreso${rot.ingresos === 1 ? '' : 's'} · ${rot.egresos} egreso${rot.egresos === 1 ? '' : 's'}`, 'gris')
   ].join('');
 
@@ -871,11 +1097,15 @@ async function cargarDashboard(forzar = false) {
   });
   grafico('ch-extras', {
     type: 'bar',
-    data: { labels: pd.map(d => d.depto), datasets: [{ label: 'Horas extra', data: pd.map(d => +(d.minExtra / 60).toFixed(1)), backgroundColor: '#7c3aed', borderRadius: 6 }] },
-    options: baseOpciones({ plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } }, y: { beginAtZero: true, ticks: { callback: v => v + ' h' } } } })
+    data: { labels: pd.map(d => d.depto), datasets: [
+      { label: 'Horas extra (netas)', data: pd.map(d => +(d.minExtra / 60).toFixed(1)), backgroundColor: COLORES.extra, borderRadius: 6 },
+      { label: 'Horas de retraso', data: pd.map(d => +(d.minRetraso / 60).toFixed(1)), backgroundColor: COLORES.retraso, borderRadius: 6 }
+    ] },
+    options: baseOpciones({ scales: { x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 0, font: { size: 10 } } }, y: { beginAtZero: true, ticks: { callback: v => v + ' h' } } } })
   });
 
   pintarAlertas(f.depto, f.q);
+  pintarManualesDashboard(asistencia, new Set(emps.map(e => e.ID)));
 
   renderTabla('dash-tabla-deptos', 't-dash-deptos', [
     { t: 'Departamento', v: d => `<b>${esc(d.depto)}</b>`, s: d => d.depto, c: d => d.depto },
@@ -883,15 +1113,16 @@ async function cargarDashboard(forzar = false) {
     { t: 'Asistencia', v: d => `<span class="${colorPuntaje(d.pctAsistencia)} font-semibold">${fmtPct(d.pctAsistencia)}</span>`, s: d => d.pctAsistencia, c: d => pctCSV(d.pctAsistencia), cls: 'text-right' },
     { t: 'Puntualidad', v: d => `<span class="${colorPuntaje(d.pctPuntualidad)} font-semibold">${fmtPct(d.pctPuntualidad)}</span>`, s: d => d.pctPuntualidad, c: d => pctCSV(d.pctPuntualidad), cls: 'text-right' },
     { t: 'Retrasos', v: d => d.tardes, s: d => d.tardes, c: d => d.tardes, cls: 'text-right' },
+    { t: 'Horas retraso', v: d => d.minRetraso ? `<span class="text-marca-700 font-semibold">${fmtHoras(d.minRetraso)}</span>` : '—', s: d => d.minRetraso, c: d => hCSV(d.minRetraso), cls: 'text-right' },
     { t: 'Ausencias', v: d => d.ausencias, s: d => d.ausencias, c: d => d.ausencias, cls: 'text-right' },
     { t: 'Justificadas', v: d => d.justificados, s: d => d.justificados, c: d => d.justificados, cls: 'text-right' },
     { t: 'Horas trabajadas', v: d => fmtHoras(d.minTrabajados), s: d => d.minTrabajados, c: d => hCSV(d.minTrabajados), cls: 'text-right' },
-    { t: 'Horas extra', v: d => fmtHoras(d.minExtra), s: d => d.minExtra, c: d => hCSV(d.minExtra), cls: 'text-right' },
+    { t: 'Horas extra', v: d => d.minExtra ? `<span class="text-navy-700 font-semibold">${fmtHoras(d.minExtra)}</span>` : '—', s: d => d.minExtra, c: d => hCSV(d.minExtra), cls: 'text-right' },
     { t: 'Desempeño', v: d => `<span class="${colorPuntaje(d.evalProm)} font-semibold">${d.evalProm === null ? '—' : fmtNum(d.evalProm)}</span>`, s: d => d.evalProm, c: d => d.evalProm === null ? '' : d.evalProm.toFixed(1).replace('.', ','), cls: 'text-right' }
   ], k.porDepto, { vacio: 'No hay empleados para estos filtros.' });
 
   renderTabla('dash-tabla-emp', 't-dash-emp', [
-    { t: 'Empleado', v: r => `<button data-acc="ver-expediente" data-id="${esc(r.e.ID)}" class="font-semibold text-marca-700 hover:underline text-left">${esc(nombreCompleto(r.e))}</button><div class="text-xs text-slate-400">${esc(r.e.Cargo || '')}</div>`, s: r => nombreCompleto(r.e), c: r => nombreCompleto(r.e) },
+    { t: 'Empleado', v: r => `<button data-acc="ver-expediente" data-id="${esc(r.e.ID)}" class="font-semibold text-navy-900 hover:text-marca-700 text-left">${esc(nombreCompleto(r.e))}</button><div class="text-xs text-slate-400">${esc(r.e.Cargo || '')}</div>`, s: r => nombreCompleto(r.e), c: r => nombreCompleto(r.e) },
     { t: 'Cédula', v: r => esc(r.e.Cedula), c: r => r.e.Cedula },
     { t: 'Departamento', v: r => esc(r.e.Departamento), s: r => r.e.Departamento, c: r => r.e.Departamento },
     { t: 'Jornadas', v: r => r.esperados, s: r => r.esperados, c: r => r.esperados, cls: 'text-right' },
@@ -899,9 +1130,9 @@ async function cargarDashboard(forzar = false) {
     { t: 'Ausencias', v: r => r.ausencias ? `<span class="text-rose-600 font-semibold" title="${esc(r.fechasAusente.map(fmtFecha).join(', '))}">${r.ausencias}</span>` : '0', s: r => r.ausencias, c: r => r.ausencias, cls: 'text-right' },
     { t: 'Justif.', v: r => r.justificados, s: r => r.justificados, c: r => r.justificados, cls: 'text-right' },
     { t: 'Retrasos', v: r => r.tardes ? `<span class="text-amber-600 font-semibold">${r.tardes}</span> <span class="text-xs text-slate-400">(${fmtMin(r.minRetraso)})</span>` : '0', s: r => r.minRetraso, c: r => r.tardes, cls: 'text-right whitespace-nowrap' },
-    { t: 'Min. retraso', v: r => Math.round(r.minRetraso), s: r => r.minRetraso, c: r => Math.round(r.minRetraso), cls: 'text-right hidden' },
+    { t: 'Horas retraso', v: r => r.minRetraso ? `<span class="text-marca-700 font-semibold">${fmtHoras(r.minRetraso)}</span>` : '—', s: r => r.minRetraso, c: r => hCSV(r.minRetraso), cls: 'text-right whitespace-nowrap' },
     { t: 'Horas trab.', v: r => fmtHoras(r.minTrabajados), s: r => r.minTrabajados, c: r => hCSV(r.minTrabajados), cls: 'text-right whitespace-nowrap' },
-    { t: 'Horas extra', v: r => r.minExtra ? `<b class="text-violet-700">${fmtHoras(r.minExtra)}</b>` : '—', s: r => r.minExtra, c: r => hCSV(r.minExtra), cls: 'text-right whitespace-nowrap' },
+    { t: 'Horas extra', v: r => r.minExtra ? `<b class="text-navy-700">${fmtHoras(r.minExtra)}</b>` : '—', s: r => r.minExtra, c: r => hCSV(r.minExtra), cls: 'text-right whitespace-nowrap' },
     { t: 'Asistencia', v: r => `<span class="${colorPuntaje(r.pctAsistencia)} font-semibold">${fmtPct(r.pctAsistencia)}</span>`, s: r => r.pctAsistencia, c: r => pctCSV(r.pctAsistencia), cls: 'text-right' },
     { t: 'Puntualidad', v: r => `<span class="${colorPuntaje(r.pctPuntualidad)} font-semibold">${fmtPct(r.pctPuntualidad)}</span>`, s: r => r.pctPuntualidad, c: r => pctCSV(r.pctPuntualidad), cls: 'text-right' },
     { t: 'Desempeño', v: r => `<span class="${colorPuntaje(r.evalProm)} font-semibold">${r.evalProm === null ? '—' : fmtNum(r.evalProm)}</span>`, s: r => r.evalProm, c: r => r.evalProm === null ? '' : r.evalProm.toFixed(1).replace('.', ','), cls: 'text-right' }
@@ -909,12 +1140,47 @@ async function cargarDashboard(forzar = false) {
   iconos();
 }
 
+/* ---------- Marcajes manuales y justificativos en el dashboard ---------- */
+const esManual = a => a.Origen && a.Origen !== 'GPS';
+function insigniaJustificativo(a) {
+  if (!esManual(a)) return '<span class="text-slate-300">—</span>';
+  const j = a.Justificativo || 'Sin justificativo';
+  const clip = a.SoporteFileID ? `<button data-acc="ver-soporte" data-id="${esc(a.ID)}" class="ml-1 text-navy-700 hover:text-marca-700" title="Ver soporte"><i data-lucide="paperclip" class="w-4 h-4 inline"></i></button>` : '';
+  return `<span class="insignia bg-oro-100 text-oro-700" title="${esc(a.Observacion || '')}">${esc(j)}</span>${clip}`;
+}
+
+function pintarManualesDashboard(asistencia, ids) {
+  const lista = asistencia.filter(a => esManual(a) && ids.has(a.EmpleadoID))
+    .map(a => Object.assign({ _e: empPorId(a.EmpleadoID) || { Nombres: a.Email, Apellidos: '' } }, a))
+    .sort((a, b) => a.Fecha < b.Fecha ? 1 : -1);
+  const conteo = {};
+  lista.forEach(a => { const j = a.Justificativo || 'Sin justificativo'; conteo[j] = (conteo[j] || 0) + 1; });
+  const etq = Object.keys(conteo).sort((a, b) => conteo[b] - conteo[a]);
+  grafico('ch-justif', {
+    type: 'bar',
+    data: { labels: etq, datasets: [{ label: 'Marcajes', data: etq.map(j => conteo[j]), backgroundColor: etq.map((_, i) => COLORES.serie[i % COLORES.serie.length]), borderRadius: 6 }] },
+    options: baseOpciones({ indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false }, ticks: { font: { size: 10 } } } } })
+  });
+  renderTabla('dash-manuales', 't-dash-manuales', [
+    { t: 'Fecha', v: a => `<span class="cap1">${esc(fmtFechaCorta(a.Fecha))}</span>`, s: a => a.Fecha, c: a => a.Fecha },
+    { t: 'Empleado', v: a => `<button data-acc="ver-expediente" data-id="${esc(a.EmpleadoID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(a._e))}</button><div class="text-xs text-slate-400">${esc(a._e.Departamento || '')}</div>`, s: a => nombreCompleto(a._e), c: a => nombreCompleto(a._e) },
+    { t: 'Departamento', v: a => esc(a._e.Departamento), c: a => a._e.Departamento, cls: 'hidden' },
+    { t: 'Horario', v: a => `${fmtHora(a.Entrada)} → ${fmtHora(a.Salida)}`, c: a => `${fmtHora(a.Entrada)} - ${fmtHora(a.Salida)}` },
+    { t: 'Justificativo', v: a => insigniaJustificativo(a), s: a => a.Justificativo || '', c: a => a.Justificativo || 'Sin justificativo' },
+    { t: 'Detalle', v: a => `<span class="text-xs text-slate-500">${esc(a.Observacion)}</span>`, c: a => a.Observacion, cls: 'envolver' },
+    { t: 'Vía', v: a => a.SolicitudID ? '<span class="insignia bg-navy-50 text-navy-700">Solicitud</span>' : '<span class="insignia bg-slate-100 text-slate-600">RRHH</span>', c: a => a.SolicitudID ? 'Solicitud del empleado' : 'Registro de RRHH' },
+    { t: 'Soporte', v: a => a.SoporteFileID ? 'Sí' : 'No', c: a => a.SoporteFileID ? 'Sí' : 'No', cls: 'hidden' }
+  ], lista, { vacio: 'No hubo marcajes manuales en este período.' });
+}
+
 function pintarAlertas(depto, q) {
   const hoy = hoyStr(), en30 = sumarDias(hoy, 30), en7 = sumarDias(hoy, 7);
   const emps = S.empleados.filter(e => e.Estado !== 'Inactivo' && (!depto || e.Departamento === depto) && coincide(e, q));
   const ids = new Set(emps.map(e => e.ID));
   const a = [];
-  const item = (icono, color, titulo, detalle, id) => a.push({ icono, color, titulo, detalle, id });
+  const item = (icono, color, titulo, detalle, id, acc = `data-acc="ver-expediente" data-id="${esc(id)}"`) => a.push({ icono, color, titulo, detalle, id, acc });
+  S.solicitudes.filter(x => x.Estado === 'Pendiente' && ids.has(x.EmpleadoID)).forEach(x =>
+    item('clipboard-pen', 'ambar', `Marcaje por aprobar: ${nombreCompleto(empPorId(x.EmpleadoID))}`, `${fmtFecha(x.Fecha)} · ${x.Justificativo}`, x.EmpleadoID, 'data-acc="nav" data-sec="asistencia"'));
 
   emps.forEach(e => {
     if (e.FinContrato && e.FinContrato < hoy) item('file-x', 'rosa', `Contrato vencido: ${nombreCompleto(e)}`, `Venció el ${fmtFecha(e.FinContrato)}`, e.ID);
@@ -931,13 +1197,13 @@ function pintarAlertas(depto, q) {
     else if (p.Estado === 'Aprobado' && p.Tipo === 'Vacaciones' && p.FechaInicio > hoy && p.FechaInicio <= en7) item('plane', 'marca', `Vacaciones próximas: ${nombreCompleto(e)}`, `Desde el ${fmtFecha(p.FechaInicio)}`, e.ID);
   });
 
-  const colores = { rosa: 'bg-rose-50 text-rose-600', ambar: 'bg-amber-50 text-amber-600', azul: 'bg-sky-50 text-sky-600',
+  const colores = { rosa: 'bg-rose-50 text-rose-600', ambar: 'bg-oro-100 text-oro-700', azul: 'bg-navy-50 text-navy-700',
     gris: 'bg-slate-100 text-slate-500', violeta: 'bg-violet-50 text-violet-600', marca: 'bg-marca-50 text-marca-700' };
   const orden = { rosa: 0, ambar: 1, azul: 2, marca: 3, violeta: 4, gris: 5 };
   a.sort((x, y) => orden[x.color] - orden[y.color]);
   $('#dash-alertas-total').textContent = a.length;
   $('#dash-alertas').innerHTML = a.length ? a.map(x => `
-    <button data-acc="ver-expediente" data-id="${esc(x.id)}" class="w-full text-left flex items-start gap-3 rounded-xl p-2.5 hover:bg-slate-50">
+    <button ${x.acc} class="w-full text-left flex items-start gap-3 rounded-xl p-2.5 hover:bg-slate-50">
       <span class="h-8 w-8 rounded-lg ${colores[x.color]} flex items-center justify-center shrink-0"><i data-lucide="${x.icono}" class="w-4 h-4"></i></span>
       <span class="min-w-0"><span class="block text-sm font-medium text-slate-800">${esc(x.titulo)}</span><span class="block text-xs text-slate-500">${esc(x.detalle)}</span></span>
     </button>`).join('') : '<p class="text-sm text-slate-400 text-center py-8">Sin alertas. ¡Todo en orden!</p>';
@@ -970,7 +1236,10 @@ function pintarEmpleados() {
     { t: 'Estado', v: e => insigniaEstado(e.Estado), s: e => e.Estado, c: e => e.Estado },
     { t: 'Teléfono', v: e => esc(e.Telefono || '—'), c: e => e.Telefono, cls: 'hidden xl:table-cell' },
     { t: 'Correo', v: e => esc(e.Email), c: e => e.Email, cls: 'hidden' },
-    { t: 'Salario', v: e => esc(e.Salario), c: e => String(e.Salario || '').replace('.', ','), cls: 'hidden' },
+    { t: 'Salario semanal', v: e => esc(e.SalarioSemanal), c: e => String(e.SalarioSemanal || '').replace('.', ','), cls: 'hidden' },
+    { t: 'Tipo de sangre', v: e => esc(e.TipoSangre), c: e => e.TipoSangre, cls: 'hidden' },
+    { t: 'Alergias', v: e => esc(e.Alergias), c: e => e.Alergias, cls: 'hidden' },
+    { t: 'Condiciones especiales', v: e => esc(e.CondicionesEspeciales), c: e => e.CondicionesEspeciales, cls: 'hidden' },
     { t: 'Tipo contrato', v: e => esc(e.TipoContrato), c: e => e.TipoContrato, cls: 'hidden' },
     { t: 'Fin contrato', v: e => esc(e.FinContrato), c: e => e.FinContrato, cls: 'hidden' },
     { t: 'Rol', v: e => esc(e.Rol), c: e => e.Rol, cls: 'hidden' },
@@ -1006,10 +1275,20 @@ function formEmpleado(id = null) {
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos laborales</legend>
         <div class="grid sm:grid-cols-3 gap-4">
           ${s('Departamento', 'Departamento *', S.sesion.departamentos, 'required')}${c('Cargo', 'Cargo')}${c('FechaIngreso', 'Fecha de ingreso *', 'date', 'required')}
+          ${c('SalarioSemanal', `Salario semanal (${esc(S.sesion.moneda)})`, 'number', 'min="0" step="0.01"')}
           ${s('TipoContrato', 'Tipo de contrato', ['Tiempo indeterminado', 'Tiempo determinado', 'Por obra determinada', 'Pasantía', 'Honorarios profesionales'])}
-          ${c('FinContrato', 'Fin de contrato (si aplica)', 'date')}${c('Salario', `Salario mensual (${esc(S.sesion.moneda)})`, 'number', 'min="0" step="0.01"')}
-          ${s('Estado', 'Estado *', cat.estados, 'required')}${c('FechaEgreso', 'Fecha de egreso', 'date')}
+          <div data-si="contrato">${c('FinContrato', 'Fin de contrato', 'date')}</div>
+          ${s('Estado', 'Estado *', cat.estados, 'required')}
+          <div data-si="egreso">${c('FechaEgreso', 'Fecha de egreso', 'date')}</div>
           ${s('Rol', 'Rol en el sistema', [{ v: 'EMPLEADO', t: 'Empleado (solo marcaje)' }, { v: 'DIRECCION', t: 'Dirección (ver todo)' }, { v: 'RRHH', t: 'RRHH (gestionar todo)' }])}
+        </div></fieldset>
+      <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Salud y datos complementarios</legend>
+        <div class="grid sm:grid-cols-3 gap-4">
+          ${s('TipoSangre', 'Tipo de sangre', OPC.sangre)}${s('EstadoCivil', 'Estado civil', OPC.civil)}${c('NumeroHijos', 'Número de hijos', 'number', 'min="0" step="1"')}
+          <div class="sm:col-span-3">${c('Alergias', 'Alergias', 'text', 'placeholder="Ej.: Penicilina, mariscos… (vacío si no tiene)"')}</div>
+          <div class="sm:col-span-3"><label class="etiqueta">Condiciones especiales</label><textarea name="CondicionesEspeciales" rows="2" class="campo" placeholder="Condiciones médicas, discapacidad, tratamientos, embarazo, restricciones laborales…">${esc(e.CondicionesEspeciales || '')}</textarea></div>
+          ${s('NivelInstruccion', 'Nivel de instrucción', OPC.instruccion)}${s('TallaCamisa', 'Talla de camisa', OPC.camisa)}
+          <div class="grid grid-cols-2 gap-3">${c('TallaPantalon', 'Talla pantalón')}${c('TallaCalzado', 'Talla calzado')}</div>
         </div></fieldset>
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Contacto de emergencia</legend>
         <div class="grid sm:grid-cols-3 gap-4">
@@ -1019,6 +1298,14 @@ function formEmpleado(id = null) {
     </form>`,
     pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-empleado" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
   });
+  const form = $('#f-empleado');
+  const condicionales = () => {
+    $('[data-si="egreso"]', form).classList.toggle('hidden', form.Estado.value !== 'Inactivo');
+    $('[data-si="contrato"]', form).classList.toggle('hidden', form.TipoContrato.value === 'Tiempo indeterminado');
+  };
+  form.Estado.addEventListener('change', condicionales);
+  form.TipoContrato.addEventListener('change', condicionales);
+  condicionales();
 }
 
 async function guardarEmpleado() {
@@ -1054,6 +1341,7 @@ async function verExpediente(id, tab = 'datos') {
           <div class="flex-1 min-w-0">
             <div class="flex flex-wrap items-center gap-2"><h4 class="text-xl font-extrabold text-slate-900">${esc(nombreCompleto(e))}</h4>${insigniaEstado(e.Estado)}</div>
             <p class="text-sm text-slate-500">${esc([e.Cargo, e.Departamento].filter(Boolean).join(' · '))} · <span class="font-mono text-xs">${esc(e.ID)}</span> · C.I. ${esc(e.Cedula)}</p>
+            ${e.Alergias || e.CondicionesEspeciales ? `<p class="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><i data-lucide="heart-pulse" class="w-3.5 h-3.5"></i>${esc([e.Alergias ? 'Alergias: ' + e.Alergias : '', e.CondicionesEspeciales ? 'Condición especial registrada' : ''].filter(Boolean).join(' · '))}</p>` : ''}
           </div>
           <div class="flex gap-2 no-print">
             <button data-acc="imprimir-modal" class="btn-sec btn-sm"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
@@ -1096,9 +1384,17 @@ function expDatos({ empleado: e }) {
       campoLectura('Teléfono', esc(e.Telefono)), campoLectura('Correo (inicio de sesión)', esc(e.Email)), campoLectura('Dirección', esc(e.Direccion))])}
     ${bloque('Datos laborales', [campoLectura('Departamento', esc(e.Departamento)), campoLectura('Cargo', esc(e.Cargo)),
       campoLectura('Fecha de ingreso', e.FechaIngreso ? fmtFecha(e.FechaIngreso) : ''), campoLectura('Antigüedad', antig),
-      campoLectura('Tipo de contrato', esc(e.TipoContrato)), campoLectura('Fin de contrato', e.FinContrato ? fmtFecha(e.FinContrato) : ''),
-      campoLectura('Salario mensual', e.Salario ? fmtDinero(e.Salario) : ''), campoLectura('Fecha de egreso', e.FechaEgreso ? fmtFecha(e.FechaEgreso) : ''),
+      campoLectura('Tipo de contrato', esc(e.TipoContrato)),
+      ...(e.TipoContrato && e.TipoContrato !== 'Tiempo indeterminado' ? [campoLectura('Fin de contrato', e.FinContrato ? fmtFecha(e.FinContrato) : '')] : []),
+      campoLectura('Salario semanal', e.SalarioSemanal ? fmtDinero(e.SalarioSemanal) : ''),
+      ...(e.Estado === 'Inactivo' ? [campoLectura('Fecha de egreso', e.FechaEgreso ? fmtFecha(e.FechaEgreso) : '')] : []),
       campoLectura('Rol en el sistema', esc(e.Rol))])}
+    ${bloque('Salud y datos complementarios', [campoLectura('Tipo de sangre', esc(e.TipoSangre)),
+      campoLectura('Alergias', e.Alergias ? `<span class="font-semibold text-rose-700">${esc(e.Alergias)}</span>` : ''),
+      campoLectura('Condiciones especiales', e.CondicionesEspeciales ? `<span class="whitespace-pre-line">${esc(e.CondicionesEspeciales)}</span>` : ''),
+      campoLectura('Estado civil', esc(e.EstadoCivil)), campoLectura('Número de hijos', esc(e.NumeroHijos)),
+      campoLectura('Nivel de instrucción', esc(e.NivelInstruccion)),
+      campoLectura('Tallas (camisa · pantalón · calzado)', [e.TallaCamisa, e.TallaPantalon, e.TallaCalzado].some(Boolean) ? esc([e.TallaCamisa || '—', e.TallaPantalon || '—', e.TallaCalzado || '—'].join(' · ')) : '')])}
     ${bloque('Contacto de emergencia', [campoLectura('Nombre', esc(e.EmergenciaNombre)), campoLectura('Teléfono', esc(e.EmergenciaTelefono)), campoLectura('Parentesco', esc(e.EmergenciaParentesco))])}
     ${e.Notas ? `<div class="tarjeta p-5"><h5 class="font-bold text-sm text-marca-700 mb-2">Notas internas</h5><p class="text-sm whitespace-pre-line">${esc(e.Notas)}</p></div>` : ''}
     <p class="text-xs text-slate-400">Creado: ${esc(e.Creado || '—')} · Última actualización: ${esc(e.Actualizado || '—')}</p>
@@ -1165,11 +1461,11 @@ function expAsistencia({ empleado: e, asistencia, permisos, evaluaciones }) {
     .map(([t, x]) => `<div class="tarjeta p-4"><p class="text-xs font-semibold text-slate-500">${t}</p><p class="text-xl font-extrabold mt-1">${x}</p></div>`).join('');
   const filas = asistencia.length ? asistencia.map(a => `<tr><td class="cap1">${esc(fmtFechaCorta(a.Fecha))}</td><td>${fmtHora(a.Entrada)}</td><td>${fmtHora(a.Salida)}</td>
     <td>${num(a.MinRetraso) > 0 ? `<span class="text-amber-600 font-semibold">${fmtMin(a.MinRetraso)}</span>` : '—'}</td><td>${a.MinTrabajados ? fmtMin(a.MinTrabajados) : '—'}</td>
-    <td>${num(a.MinExtra) > 0 ? fmtMin(a.MinExtra) : '—'}</td><td class="text-xs">${a.Origen === 'MANUAL' ? `<span class="insignia bg-slate-100 text-slate-600" title="${esc(a.Observacion)}">Manual</span>` : `GPS · ${esc(a.DistEntrada)} m`}</td></tr>`).join('')
+    <td>${num(a.MinExtra) > 0 ? fmtMin(a.MinExtra) : '—'}</td><td class="text-xs">${esManual(a) ? insigniaJustificativo(a) : `GPS · ${esc(a.DistEntrada)} m`}</td></tr>`).join('')
     : '<tr><td colspan="7" class="text-center text-slate-400 py-8">Sin marcajes en los últimos 90 días.</td></tr>';
   return `<div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">${tarjetas}</div>
     <div class="tarjeta p-5 mb-5"><h5 class="font-bold text-sm text-marca-700 mb-3">Hora de entrada · últimos 30 días</h5><div class="h-56"><canvas id="ch-exp-asis"></canvas></div></div>
-    <div class="tarjeta overflow-x-auto"><table class="tabla"><thead><tr><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Retraso</th><th>Trabajado</th><th>Extra</th><th>Origen</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+    <div class="tarjeta overflow-x-auto"><table class="tabla"><thead><tr><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Retraso</th><th>Trabajado</th><th>Extra</th><th>Origen / justificativo</th></tr></thead><tbody>${filas}</tbody></table></div>`;
 }
 
 function expAsistenciaGrafico({ asistencia }) {
@@ -1182,7 +1478,7 @@ function expAsistenciaGrafico({ asistencia }) {
     data: {
       labels: regs.map(a => fmtFechaCorta(a.Fecha)),
       datasets: [
-        { label: 'Hora de entrada', data: regs.map(a => +minutos(a.Entrada).toFixed(1)), borderColor: COLORES.aTiempo, backgroundColor: regs.map(a => num(a.MinRetraso) > 0 ? COLORES.tarde : COLORES.aTiempo), pointRadius: 5, tension: 0.25 },
+        { label: 'Hora de entrada', data: regs.map(a => +minutos(a.Entrada).toFixed(1)), borderColor: COLORES.navy, backgroundColor: regs.map(a => num(a.MinRetraso) > 0 ? COLORES.marca : COLORES.navy), pointRadius: 5, tension: 0.25 },
         { label: 'Límite (con tolerancia)', data: regs.map(() => lim), borderColor: COLORES.ausente, borderDash: [6, 4], pointRadius: 0 }
       ]
     },
@@ -1197,6 +1493,55 @@ function expEvaluaciones({ empleado: e, evaluaciones }) {
       <td class="no-print solo-rrhh"><button data-acc="borrar-eval" data-id="${esc(v.ID)}" class="btn-fantasma btn-sm text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('')}
     </tbody></table></div>` : '<p class="text-center text-sm text-slate-400 py-8">Sin evaluaciones registradas.</p>';
   return `<div class="flex justify-end mb-3"><button data-acc="nueva-eval" data-emp="${esc(e.ID)}" class="btn-primario btn-sm solo-rrhh no-print"><i data-lucide="plus" class="w-4 h-4"></i>Nueva evaluación</button></div>${filas}`;
+}
+
+/* ---------- Selector de mes por botones (funciona en todos los navegadores) ---------- */
+function selectorMesHTML(id, valor = '', { vacio = '', name = '' } = {}) {
+  const etq = valor ? fmtPeriodo(valor) : (vacio || 'Selecciona un mes…');
+  return `<div class="relative selector-mes" data-id="${id}" data-vacio="${esc(vacio)}">
+    <input type="hidden" id="${id}" ${name ? `name="${name}"` : ''} value="${esc(valor)}">
+    <button type="button" data-acc="mes-abrir" data-id="${id}" class="campo text-left flex items-center justify-between gap-2">
+      <span data-etq class="cap1">${esc(etq)}</span><i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i></button>
+    <div data-pop class="hidden absolute left-0 z-50 mt-1 w-72 bg-white rounded-2xl border border-slate-200 p-3 shadow-xl"></div>
+  </div>`;
+}
+
+function pintarPopMes(id, anio) {
+  const cont = document.querySelector(`.selector-mes[data-id="${id}"]`);
+  const val = $('#' + id).value, vacio = cont.dataset.vacio;
+  cont.querySelector('[data-pop]').innerHTML = `
+    <div class="flex items-center justify-between mb-2">
+      <button type="button" data-acc="mes-anio" data-id="${id}" data-anio="${anio - 1}" class="btn-fantasma btn-sm"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+      <b class="text-navy-900">${anio}</b>
+      <button type="button" data-acc="mes-anio" data-id="${id}" data-anio="${anio + 1}" class="btn-fantasma btn-sm"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+    </div>
+    <div class="grid grid-cols-4 gap-1.5">${MESES.map((m, i) => {
+      const v = `${anio}-${pad(i + 1)}`;
+      return `<button type="button" data-acc="mes-elegir" data-id="${id}" data-valor="${v}" class="rounded-lg py-2 text-sm font-semibold ${v === val ? 'bg-marca-700 text-white' : v === hoyStr().slice(0, 7) ? 'bg-oro-100 text-navy-900 hover:bg-oro-200' : 'text-slate-700 hover:bg-slate-100'}">${m}</button>`;
+    }).join('')}</div>
+    ${vacio ? `<button type="button" data-acc="mes-elegir" data-id="${id}" data-valor="" class="w-full mt-2 btn-fantasma btn-sm">${esc(vacio)}</button>` : ''}`;
+  iconos();
+}
+
+function cerrarSelectoresMes(excepto = null) {
+  $$('.selector-mes').forEach(c => { if (c !== excepto) c.querySelector('[data-pop]').classList.add('hidden'); });
+}
+
+function abrirSelectorMes(id) {
+  const cont = document.querySelector(`.selector-mes[data-id="${id}"]`), pop = cont.querySelector('[data-pop]');
+  cerrarSelectoresMes(cont);
+  if (!pop.classList.contains('hidden')) return pop.classList.add('hidden');
+  const val = $('#' + id).value;
+  pintarPopMes(id, val ? Number(val.slice(0, 4)) : new Date().getFullYear());
+  pop.classList.remove('hidden');
+}
+
+function elegirMes(id, valor) {
+  const cont = document.querySelector(`.selector-mes[data-id="${id}"]`), inp = $('#' + id);
+  inp.value = valor;
+  cont.querySelector('[data-etq]').textContent = valor ? fmtPeriodo(valor) : (cont.dataset.vacio || 'Selecciona un mes…');
+  cont.querySelector('[data-pop]').classList.add('hidden');
+  inp.dispatchEvent(new Event('change'));
 }
 
 const fmtPeriodo = p => p ? aFecha(p + '-01').toLocaleDateString('es-VE', { month: 'long', year: 'numeric' }) : '—';
@@ -1225,11 +1570,14 @@ async function subirDocumento(empId) {
   } catch (e) { toast(e.message, 'error', 6000); }
 }
 
-async function verDocumento(id) {
+const verDocumento = id => abrirArchivo('descargarDocumento', id);
+const verSoporte = id => abrirArchivo('descargarSoporte', id);
+
+async function abrirArchivo(accion, id) {
   const ventana = window.open('', '_blank');
   if (ventana) ventana.document.write('<p style="font-family:sans-serif;padding:24px;color:#475569">Cargando documento…</p>');
   try {
-    const d = await api('descargarDocumento', { id }, { texto: 'Descargando documento…' });
+    const d = await api(accion, { id }, { texto: 'Descargando documento…' });
     const bytes = Uint8Array.from(atob(d.base64), c => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: d.mimeType });
     if (ventana && /^(application\/pdf|image\/|text\/plain)/.test(d.mimeType)) {
@@ -1271,11 +1619,12 @@ async function cargarAsistencia(forzar = false) {
   const tarde = lista.filter(a => num(a.MinRetraso) > 0).length;
   const sinSalida = lista.filter(a => !a.Salida && a.Fecha < hoyStr()).length;
   const extra = lista.reduce((s, a) => s + num(a.MinExtra), 0);
+  pintarSolicitudes();
   $('#asis-resumen').innerHTML = [
-    tarjetaKPI('fingerprint', 'Marcajes', lista.length, `${lista.filter(a => a.Origen === 'MANUAL').length} registrados manualmente`, 'marca'),
+    tarjetaKPI('fingerprint', 'Marcajes', lista.length, `${lista.filter(esManual).length} manuales con justificativo`, 'marca'),
     tarjetaKPI('timer', 'Llegadas tarde', tarde, lista.length ? `${Math.round(tarde / lista.length * 100)}% de los marcajes` : '—', 'ambar'),
     tarjetaKPI('log-out', 'Sin salida', sinSalida, 'Jornadas pasadas sin marcar salida', 'rosa'),
-    tarjetaKPI('hourglass', 'Horas extra', fmtHoras(extra), 'Total del período', 'violeta')
+    tarjetaKPI('hourglass', 'Horas extra (netas)', fmtHoras(extra), `Retraso acumulado: ${fmtHoras(lista.reduce((s, a) => s + num(a.MinRetraso), 0))}`, 'violeta')
   ].join('');
 
   renderTabla('asis-tabla', 't-asistencia', [
@@ -1287,11 +1636,55 @@ async function cargarAsistencia(forzar = false) {
     { t: 'Salida', v: a => a.Salida ? `<b>${fmtHora(a.Salida)}</b>` : (a.Fecha < hoyStr() ? '<span class="insignia bg-rose-100 text-rose-700">Sin salida</span>' : '<span class="text-slate-400">—</span>'), s: a => a.Salida, c: a => a.Salida },
     { t: 'Retraso', v: a => num(a.MinRetraso) > 0 ? `<span class="text-amber-600 font-semibold">${fmtMin(a.MinRetraso)}</span>` : '<span class="text-emerald-600">A tiempo</span>', s: a => num(a.MinRetraso), c: a => Math.round(num(a.MinRetraso)) },
     { t: 'Trabajado', v: a => a.MinTrabajados ? fmtMin(a.MinTrabajados) : '—', s: a => num(a.MinTrabajados), c: a => hCSV(a.MinTrabajados) },
-    { t: 'Extra', v: a => num(a.MinExtra) > 0 ? `<b class="text-violet-700">${fmtMin(a.MinExtra)}</b>` : '—', s: a => num(a.MinExtra), c: a => hCSV(a.MinExtra) },
-    { t: 'Ubicación', v: a => a.Origen === 'MANUAL' ? `<span class="insignia bg-slate-100 text-slate-600" title="${esc(a.Observacion)}">Manual</span>` : `<span class="text-xs text-slate-500 whitespace-nowrap">${esc(a.DistEntrada)} m${a.DistSalida ? ' / ' + esc(a.DistSalida) + ' m' : ''}</span>`, c: a => a.Origen === 'MANUAL' ? 'Manual' : `${a.DistEntrada} m` },
+    { t: 'Extra', v: a => num(a.MinExtra) > 0 || num(a.MinExtraBruto) > 0 ? `<b class="text-navy-700" title="${num(a.MinExtraBruto) !== num(a.MinExtra) ? esc(`Brutas: ${fmtMin(a.MinExtraBruto)} − retraso ${fmtMin(a.MinRetraso)}`) : ''}">${fmtMin(a.MinExtra)}</b>${num(a.MinExtraBruto) > num(a.MinExtra) ? '<span class="block text-[10px] text-slate-400">compensado</span>' : ''}` : '—', s: a => num(a.MinExtra), c: a => hCSV(a.MinExtra) },
+    { t: 'Extra bruta', v: a => esc(a.MinExtraBruto), c: a => hCSV(a.MinExtraBruto), cls: 'hidden' },
+    { t: 'Ubicación', v: a => a.Origen === 'MANUAL' ? '<span class="text-xs text-slate-400">Manual</span>' : `<span class="text-xs text-slate-500 whitespace-nowrap">${a.DistEntrada ? esc(a.DistEntrada) + ' m' : '—'}${a.DistSalida ? ' / ' + esc(a.DistSalida) + ' m' : (a.Origen === 'GPS+MANUAL' ? ' / manual' : '')}</span>`, c: a => a.Origen === 'GPS' ? `${a.DistEntrada} m` : a.Origen },
+    { t: 'Justificativo', v: a => insigniaJustificativo(a), s: a => a.Justificativo || '', c: a => a.Justificativo },
     { t: 'Observación', v: a => esc(a.Observacion), c: a => a.Observacion, cls: 'hidden' },
     { t: '', v: a => `<div class="flex justify-end gap-1 no-print solo-rrhh"><button data-acc="marcaje-manual" data-id="${esc(a.ID)}" class="btn-fantasma btn-sm" title="Corregir"><i data-lucide="pencil" class="w-4 h-4"></i></button><button data-acc="borrar-asis" data-id="${esc(a.ID)}" class="btn-fantasma btn-sm text-rose-600" title="Eliminar"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`, cls: 'text-right' }
   ], lista, { vacio: 'No hay marcajes en este período.' });
+}
+
+/* ---------- Bandeja de solicitudes de marcaje (RRHH aprueba) ---------- */
+function pintarSolicitudes() {
+  const todas = $('#sol-todas').checked;
+  const pend = S.solicitudes.filter(x => x.Estado === 'Pendiente').length;
+  $('#sol-total').textContent = `${pend} pendiente${pend === 1 ? '' : 's'}`;
+  $('#sol-total').className = `insignia ${pend ? 'bg-oro-400 text-navy-950' : 'bg-slate-100 text-slate-500'}`;
+  actualizarInsignia(pend);
+  const lista = S.solicitudes.filter(x => todas || x.Estado === 'Pendiente')
+    .map(x => Object.assign({ _e: empPorId(x.EmpleadoID) || { Nombres: x.Email, Apellidos: '' } }, x))
+    .sort((a, b) => (a.Estado === 'Pendiente') !== (b.Estado === 'Pendiente') ? (a.Estado === 'Pendiente' ? -1 : 1) : (a.Creado < b.Creado ? 1 : -1));
+  renderTabla('sol-tabla', 't-solicitudes', [
+    { t: 'Fecha', v: x => `<span class="cap1 whitespace-nowrap">${esc(fmtFechaCorta(x.Fecha))}</span>`, s: x => x.Fecha },
+    { t: 'Empleado', v: x => `<b>${esc(nombreCompleto(x._e))}</b><div class="text-xs text-slate-400">${esc(x._e.Departamento || '')}</div>`, s: x => nombreCompleto(x._e) },
+    { t: 'Solicita', v: x => `${x.Entrada ? 'Entrada <b>' + fmtHora(x.Entrada) + '</b>' : ''}${x.Entrada && x.Salida ? '<br>' : ''}${x.Salida ? 'Salida <b>' + fmtHora(x.Salida) + '</b>' : ''}` },
+    { t: 'Justificativo', v: x => `<span class="insignia bg-oro-100 text-oro-700">${esc(x.Justificativo)}</span>${x.Detalle ? `<p class="text-xs text-slate-500 mt-1">${esc(x.Detalle)}</p>` : ''}`, cls: 'envolver' },
+    { t: 'Soporte', v: x => x.SoporteFileID ? `<button data-acc="ver-soporte" data-id="${esc(x.ID)}" class="btn-fantasma btn-sm"><i data-lucide="paperclip" class="w-4 h-4"></i>Ver</button>` : '<span class="text-xs text-slate-300">—</span>' },
+    { t: 'Enviada', v: x => `<span class="text-xs text-slate-500">${esc(String(x.Creado).slice(0, 16))}</span>`, s: x => x.Creado },
+    { t: 'Estado', v: x => insigniaEstado(x.Estado) + (x.ComentarioRevision ? `<p class="text-xs text-slate-500 mt-1">${esc(x.ComentarioRevision)}</p>` : ''), s: x => x.Estado },
+    { t: '', v: x => x.Estado === 'Pendiente' ? `<div class="flex justify-end gap-1 solo-rrhh whitespace-nowrap">
+        <button data-acc="aprobar-solicitud" data-id="${esc(x.ID)}" class="btn btn-sm bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><i data-lucide="check" class="w-4 h-4"></i>Aprobar</button>
+        <button data-acc="rechazar-solicitud" data-id="${esc(x.ID)}" class="btn btn-sm bg-rose-50 text-rose-700 hover:bg-rose-100"><i data-lucide="x" class="w-4 h-4"></i>Rechazar</button></div>` : '', cls: 'text-right' }
+  ], lista, { vacio: todas ? 'No hay solicitudes en este período.' : 'No hay solicitudes pendientes. ¡Todo al día!', pie: false });
+}
+
+async function resolverSolicitud(id, decision) {
+  const x = S.solicitudes.find(y => y.ID === id);
+  const quien = x ? nombreCompleto(empPorId(x.EmpleadoID)) : 'el empleado';
+  let comentario = '';
+  if (decision === 'Aprobada') {
+    if (!await dialogo({ titulo: '¿Aprobar solicitud?', mensaje: `Se registrará el marcaje de ${quien} del ${x ? fmtFecha(x.Fecha) : ''} y se recalcularán sus horas.`, boton: 'Aprobar' })) return;
+  } else {
+    comentario = await dialogo({ titulo: 'Rechazar solicitud', mensaje: `${quien} verá este motivo en su celular.`, boton: 'Rechazar', peligro: true, conTexto: true, placeholder: 'Ej.: No hay soporte de la salida a campo.' });
+    if (!comentario) return;
+  }
+  try {
+    await api('resolverSolicitud', { id, decision, comentario }, { texto: decision === 'Aprobada' ? 'Aprobando…' : 'Rechazando…' });
+    toast(`Solicitud ${decision.toLowerCase()}.`, 'ok');
+    invalidarCache();
+    cargarAsistencia(true);
+  } catch (e) { toast(e.message, 'error', 6000); }
 }
 
 async function formMarcajeManual(id = null) {
@@ -1302,27 +1695,32 @@ async function formMarcajeManual(id = null) {
     a = todos.find(x => x.ID === id) || a;
   }
   const activos = S.empleados.filter(e => e.Estado !== 'Inactivo').sort(ordenarNombre);
+  const hora = h => (fmtHora(h) === '—' ? '' : fmtHora(h));
   abrirModal({
     titulo: id ? 'Corregir marcaje' : 'Registro manual de asistencia',
-    cuerpo: `<form id="f-manual" class="grid sm:grid-cols-2 gap-4">
-      <div class="sm:col-span-2"><label class="etiqueta">Empleado *</label><select name="empleadoId" class="campo" required ${id ? 'disabled' : ''}>${opciones(activos.map(e => ({ v: e.ID, t: `${nombreCompleto(e)} · ${e.Departamento}` })), a.EmpleadoID || '', 'Selecciona…')}</select>
+    cuerpo: `<form id="f-manual" class="space-y-4">
+      <div><label class="etiqueta">Empleado *</label><select name="empleadoId" class="campo" required ${id ? 'disabled' : ''}>${opciones(activos.map(e => ({ v: e.ID, t: `${nombreCompleto(e)} · ${e.Departamento}` })), a.EmpleadoID || '', 'Selecciona…')}</select>
         ${id ? `<input type="hidden" name="empleadoId" value="${esc(a.EmpleadoID)}">` : ''}</div>
-      <div><label class="etiqueta">Fecha *</label><input name="fecha" type="date" class="campo" required max="${hoyStr()}" value="${esc(a.Fecha)}" ${id ? 'readonly' : ''}></div>
-      <div></div>
-      <div><label class="etiqueta">Hora de entrada *</label><input name="entrada" type="time" class="campo" required value="${esc(fmtHora(a.Entrada) === '—' ? '' : fmtHora(a.Entrada))}"></div>
-      <div><label class="etiqueta">Hora de salida</label><input name="salida" type="time" class="campo" value="${esc(fmtHora(a.Salida) === '—' ? '' : fmtHora(a.Salida))}"></div>
-      <div class="sm:col-span-2"><label class="etiqueta">Motivo *</label><textarea name="observacion" rows="2" class="campo" required placeholder="Ej.: Olvidó marcar la salida; teléfono sin batería; corrección autorizada por gerencia.">${esc(String(a.Observacion || '').replace(/ \(por .+\)$/, ''))}</textarea></div>
-      <p class="sm:col-span-2 text-xs text-slate-500">Si ya existe un marcaje para ese empleado y fecha, se corregirá. Queda registrado en la auditoría.</p>
+      ${camposMarcajeHTML({ conModo: false, fecha: a.Fecha, entrada: hora(a.Entrada), salida: hora(a.Salida), justificativo: a.Justificativo || '',
+        detalle: String(a.Observacion || '').replace(/\s*\((registrado|solicitado|por) .+\)$/, ''), etiquetaDetalle: 'Observación' })}
+      <p class="text-xs text-slate-500">Como RRHH puedes registrar cualquier fecha pasada. Si ya existe un marcaje ese día, se corregirá. Queda en la auditoría.</p>
     </form>`,
     pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-manual" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
   });
+  const form = $('#f-manual');
+  form.entrada.required = true;
+  if (id) form.fecha.readOnly = true;
 }
 
 async function guardarManual() {
   const form = $('#f-manual');
   if (!form.reportValidity()) return;
+  const d = { empleadoId: form.querySelector('[name=empleadoId]:not([disabled])')?.value || form.empleadoId.value, fecha: form.fecha.value,
+    entrada: form.entrada.value, salida: form.salida.value, justificativo: form.justificativo.value, observacion: form.detalle.value.trim() };
   try {
-    await api('marcajeManual', datosFormulario(form), { texto: 'Guardando…' });
+    cargando(true, 'Preparando soporte…');
+    try { d.archivo = await archivoParaEnviar(form.archivo.files[0]); } finally { cargando(false); }
+    await api('marcajeManual', d, { texto: 'Guardando…' });
     toast('Marcaje guardado.', 'ok');
     cerrarModal(); invalidarCache();
     if (S.seccion === 'asistencia') cargarAsistencia(true);
@@ -1416,8 +1814,9 @@ async function formPermiso({ id = null, emp = null } = {}) {
   form.FechaInicio.addEventListener('change', () => { if (form.FechaFin.value < form.FechaInicio.value) form.FechaFin.value = form.FechaInicio.value; recalcular(true); });
   form.FechaFin.addEventListener('change', () => recalcular(true));
   form.EmpleadoID.addEventListener('change', () => recalcular(false));
-  form.Tipo.addEventListener('change', () => recalcular(false));
-  recalcular(!id);
+  const otro = () => { form.Observacion.required = form.Tipo.value === TIPO_OTRO; form.Observacion.placeholder = form.Tipo.value === TIPO_OTRO ? 'Obligatorio: explica el motivo del permiso.' : 'Ej.: Reposo según certificado médico N.º…'; };
+  form.Tipo.addEventListener('change', () => { recalcular(false); otro(); });
+  recalcular(!id); otro();
 }
 
 async function guardarPermiso() {
@@ -1507,7 +1906,7 @@ async function formEvaluacion(emp = null) {
     cuerpo: `<form id="f-eval" class="space-y-4">
       <div class="grid sm:grid-cols-2 gap-4">
         <div><label class="etiqueta">Empleado *</label><select name="EmpleadoID" class="campo" required>${opciones(activos.map(e => ({ v: e.ID, t: `${nombreCompleto(e)} · ${e.Departamento}` })), emp || '', 'Selecciona…')}</select></div>
-        <div><label class="etiqueta">Período evaluado *</label><input name="Periodo" type="month" class="campo" required value="${mesAnt}"></div>
+        <div><label class="etiqueta">Período evaluado *</label>${selectorMesHTML('ev-form-periodo', mesAnt, { name: 'Periodo' })}</div>
       </div>
       <div class="tarjeta p-4 space-y-4">
         ${CRITERIOS.map(c => `<div>
@@ -1555,6 +1954,7 @@ async function guardarEvaluacion() {
   const form = $('#f-eval');
   if (!form.reportValidity()) return;
   const datos = datosFormulario(form);
+  if (!datos.Periodo) return toast('Selecciona el período evaluado.', 'aviso');
   try {
     await api('guardarEvaluacion', { evaluacion: datos }, { texto: 'Guardando evaluación…' });
     toast('Evaluación guardada.', 'ok');
@@ -1618,11 +2018,22 @@ const ACC = {
   'borrar-eval': d => borrarEvaluacion(d.id),
   'marcaje-manual': d => formMarcajeManual(d.id || null),
   'guardar-manual': () => guardarManual(),
-  'borrar-asis': d => borrarAsistencia(d.id)
+  'borrar-asis': d => borrarAsistencia(d.id),
+  'solicitar-marcaje': () => formSolicitud(),
+  'enviar-solicitud': () => enviarSolicitud(),
+  'aprobar-solicitud': d => resolverSolicitud(d.id, 'Aprobada'),
+  'rechazar-solicitud': d => resolverSolicitud(d.id, 'Rechazada'),
+  'ver-soporte': d => verSoporte(d.id),
+  'celebrar': () => celebrar(),
+  'mes-abrir': d => abrirSelectorMes(d.id),
+  'mes-anio': d => pintarPopMes(d.id, Number(d.anio)),
+  'mes-elegir': d => elegirMes(d.id, d.valor)
 };
 
 function prepararUI() {
   $('#anio').textContent = new Date().getFullYear();
+  $('#version').textContent = VERSION;
+  $('#ev-periodo-cont').innerHTML = selectorMesHTML('ev-periodo', '', { vacio: 'Todos los períodos' });
   construirNavegacion();
   prepararFiltro('dash', 'semana', forzar => cargarDashboard(forzar));
   prepararFiltro('asis', 'hoy', forzar => cargarAsistencia(forzar));
@@ -1633,8 +2044,11 @@ function prepararUI() {
   ['#per-depto', '#per-tipo', '#per-estado'].forEach(s => $(s).addEventListener('change', pintarPermisos));
   $('#ev-buscar').addEventListener('input', () => { clearTimeout(t3); t3 = setTimeout(pintarEvaluaciones, 200); });
   ['#ev-depto', '#ev-periodo'].forEach(s => $(s).addEventListener('change', pintarEvaluaciones));
+  $('#sol-todas').addEventListener('change', pintarSolicitudes);
+  window.addEventListener('hashchange', () => { if (S.sesion) entrarSegunRuta(); });
 
   document.addEventListener('click', ev => {
+    if (!ev.target.closest('.selector-mes')) cerrarSelectoresMes();
     const b = ev.target.closest('[data-acc]');
     if (!b || b.disabled) return;
     const fn = ACC[b.dataset.acc];
