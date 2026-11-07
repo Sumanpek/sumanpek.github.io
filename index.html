@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Apps Anabel · RRHH Sumanpek, C.A.</title>
+  <meta name="theme-color" content="#0f766e">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%230f766e'/><text x='32' y='42' font-size='28' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'>AA</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            marca: { 50: '#f0fdfa', 100: '#ccfbf1', 200: '#99f6e4', 300: '#5eead4', 400: '#2dd4bf',
+                     500: '#14b8a6', 600: '#0d9488', 700: '#0f766e', 800: '#115e59', 900: '#134e4a' }
+          }
+        }
+      }
+    };
+  </script>
+  <style type="text/tailwindcss">
+    @layer components {
+      .tarjeta { @apply bg-white rounded-2xl border border-slate-200/80 shadow-sm; }
+      .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap; }
+      .btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
+      .btn-primario { @apply btn bg-marca-700 text-white hover:bg-marca-800 shadow-sm; }
+      .btn-sec { @apply btn bg-white text-slate-700 border border-slate-300 hover:bg-slate-50; }
+      .btn-peligro { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
+      .btn-fantasma { @apply btn text-slate-600 hover:bg-slate-100; }
+      .etiqueta { @apply block text-xs font-semibold text-slate-600 mb-1; }
+      .campo { @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-marca-600 focus:ring-2 focus:ring-marca-600/20 outline-none transition; }
+      .insignia { @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap; }
+      .tabla { @apply w-full text-sm; }
+      .tabla thead th { @apply bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 px-4 py-3 border-b border-slate-200 whitespace-nowrap select-none; }
+      .tabla tbody td { @apply px-4 py-3 border-b border-slate-100 align-middle whitespace-nowrap; }
+      .tabla tbody td.envolver { @apply whitespace-normal min-w-[220px]; }
+      .tabla tbody tr:hover { @apply bg-slate-50/70; }
+      .nav-item { @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition w-full text-left; }
+      .nav-item.activo { @apply bg-white/15 text-white; }
+      .nav-movil { @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 whitespace-nowrap; }
+      .nav-movil.activo { @apply bg-marca-700 text-white border-marca-700; }
+      .pestana { @apply px-4 py-2.5 text-sm font-semibold text-slate-500 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap; }
+      .pestana.activo { @apply text-marca-700 border-marca-700; }
+      .titulo-tarjeta { @apply font-semibold text-slate-800; }
+    }
+  </style>
+  <style>
+    .cap1 { display: inline-block; }
+    .cap1::first-letter { text-transform: uppercase; }
+    body.rol-direccion .solo-rrhh { display: none !important; }
+    .scroll-fino::-webkit-scrollbar { height: 6px; width: 6px; }
+    .scroll-fino::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    .girar { animation: girar 0.9s linear infinite; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+    .pulso { animation: pulso 2s ease-in-out infinite; }
+    @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+    th[data-acc="ordenar"] { cursor: pointer; }
+    #print-encabezado { display: none; }
+    @media print {
+      @page { size: A4 landscape; margin: 12mm; }
+      body { background: #fff !important; }
+      .no-print, #sidebar, #nav-movil, #toasts, #cargando, #modal { display: none !important; }
+      #print-encabezado { display: block !important; }
+      #v-admin main { margin: 0 !important; padding: 0 !important; }
+      .tarjeta { box-shadow: none !important; break-inside: avoid; }
+      .overflow-x-auto, .overflow-y-auto { overflow: visible !important; max-height: none !important; }
+      body.print-modal #v-admin, body.print-modal #v-marcaje { display: none !important; }
+      body.print-modal #modal { display: block !important; position: static !important; }
+      body.print-modal #modal-caja { max-height: none !important; box-shadow: none !important; border: 0 !important; max-width: none !important; }
+      body.print-modal #modal-cuerpo { overflow: visible !important; }
+      body.print-modal #modal-pie, body.print-modal #modal-fondo { display: none !important; }
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body class="bg-slate-100 text-slate-800 font-sans antialiased">
+
+  <!-- ================= INDICADOR DE CARGA ================= -->
+  <div id="cargando" class="fixed inset-0 z-[90] hidden flex items-center justify-center bg-white/60 backdrop-blur-[2px]">
+    <div class="tarjeta px-6 py-5 flex items-center gap-3 shadow-xl">
+      <div class="h-6 w-6 rounded-full border-[3px] border-marca-200 border-t-marca-700 girar"></div>
+      <span id="cargando-texto" class="text-sm font-medium text-slate-700">Cargando…</span>
+    </div>
+  </div>
+
+  <!-- ================= NOTIFICACIONES ================= -->
+  <div id="toasts" class="fixed top-4 right-4 left-4 sm:left-auto z-[100] flex flex-col gap-2 sm:w-96 pointer-events-none"></div>
+
+  <!-- ================= VENTANA MODAL ================= -->
+  <div id="modal" class="fixed inset-0 z-[80] hidden">
+    <div id="modal-fondo" class="absolute inset-0 bg-slate-900/50"></div>
+    <div class="relative h-full w-full flex items-end sm:items-center justify-center sm:p-4">
+      <div id="modal-caja" class="bg-white w-full sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[94vh] sm:max-w-2xl">
+        <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-200">
+          <h3 id="modal-titulo" class="font-bold text-lg text-slate-800"></h3>
+          <button data-acc="cerrar-modal" class="no-print p-2 rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Cerrar"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+        <div id="modal-cuerpo" class="p-5 overflow-y-auto scroll-fino"></div>
+        <div id="modal-pie" class="px-5 py-4 border-t border-slate-200 bg-slate-50 sm:rounded-b-2xl flex flex-wrap justify-end gap-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= VISTA: INICIO DE SESIÓN ================= -->
+  <section id="v-login" class="vista hidden min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-marca-900 via-marca-700 to-slate-900">
+    <div class="w-full max-w-sm">
+      <div class="bg-white rounded-3xl shadow-2xl p-8 text-center">
+        <div class="mx-auto mb-5 h-16 w-16 rounded-2xl bg-marca-700 text-white flex items-center justify-center text-2xl font-extrabold shadow-lg">AA</div>
+        <h1 class="text-2xl font-extrabold text-slate-900">Apps Anabel</h1>
+        <p class="text-sm text-slate-500 mt-1">Recursos Humanos · Sumanpek, C.A.</p>
+        <div class="my-7 border-t border-slate-100"></div>
+        <p class="text-sm font-medium text-slate-700 mb-4">Inicia sesión con tu cuenta de Google</p>
+        <div id="btn-google" class="flex justify-center min-h-[44px]"></div>
+        <div id="login-msg" class="hidden mt-5 rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 text-left"></div>
+        <p class="text-xs text-slate-400 mt-6 leading-relaxed">Usa el correo de Gmail que registró Recursos Humanos.<br>Para marcar asistencia debes estar en la empresa con el GPS activado.</p>
+      </div>
+      <p class="text-center text-xs text-marca-100/70 mt-6">© <span id="anio"></span> Sumanpek, C.A. · Uso interno</p>
+    </div>
+  </section>
+
+  <!-- ================= VISTA: MARCAJE DE ASISTENCIA (MÓVIL) ================= -->
+  <section id="v-marcaje" class="vista hidden min-h-screen bg-slate-100">
+    <header class="bg-gradient-to-br from-marca-800 to-marca-700 text-white px-5 pt-6 pb-24">
+      <div class="max-w-md mx-auto flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div id="mc-avatar" class="h-11 w-11 shrink-0 rounded-full bg-white/20 flex items-center justify-center font-bold">–</div>
+          <div class="min-w-0">
+            <p id="mc-nombre" class="font-semibold truncate">–</p>
+            <p id="mc-cargo" class="text-xs text-marca-100 truncate">–</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button id="mc-volver" data-acc="ir-panel" class="hidden p-2.5 rounded-xl bg-white/10 hover:bg-white/20" title="Volver al panel"><i data-lucide="layout-dashboard" class="w-5 h-5"></i></button>
+          <button data-acc="salir" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20" title="Cerrar sesión"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-md mx-auto px-5 -mt-16 pb-10 space-y-4">
+      <div class="tarjeta p-6 text-center shadow-lg">
+        <p id="mc-fecha" class="text-sm font-medium text-slate-500 cap1">–</p>
+        <p id="mc-reloj" class="text-5xl font-extrabold tracking-tight text-slate-900 my-2 tabular-nums">--:--</p>
+        <p class="text-xs text-slate-400">Horario: <span id="mc-horario">–</span></p>
+
+        <div id="mc-estado" class="mt-5 rounded-xl px-4 py-3 text-sm font-medium"></div>
+
+        <div class="grid grid-cols-2 gap-3 mt-5">
+          <button id="btn-entrada" data-acc="marcar" data-tipo="ENTRADA" class="btn bg-marca-700 hover:bg-marca-800 text-white py-5 rounded-2xl flex-col gap-1 text-base shadow-md">
+            <i data-lucide="log-in" class="w-7 h-7"></i>Entrada
+          </button>
+          <button id="btn-salida" data-acc="marcar" data-tipo="SALIDA" class="btn bg-slate-800 hover:bg-slate-900 text-white py-5 rounded-2xl flex-col gap-1 text-base shadow-md">
+            <i data-lucide="log-out" class="w-7 h-7"></i>Salida
+          </button>
+        </div>
+
+        <div id="mc-geo" class="mt-5 flex items-center justify-center gap-2 text-xs text-slate-500">
+          <i data-lucide="map-pin" class="w-4 h-4"></i><span id="mc-geo-texto">Ubicación sin verificar</span>
+        </div>
+        <button data-acc="verificar-ubicacion" class="btn-fantasma btn-sm mt-2 mx-auto"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Verificar mi ubicación</button>
+      </div>
+
+      <div class="tarjeta">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 class="titulo-tarjeta">Mis últimos marcajes</h3>
+          <span class="text-xs text-slate-400">30 días</span>
+        </div>
+        <div id="mc-historial" class="divide-y divide-slate-100"></div>
+      </div>
+      <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.</p>
+    </main>
+  </section>
+
+  <!-- ================= VISTA: PANEL DE GESTIÓN (RRHH / DIRECCIÓN) ================= -->
+  <section id="v-admin" class="vista hidden min-h-screen">
+    <!-- Barra lateral (escritorio) -->
+    <aside id="sidebar" class="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col bg-slate-900 text-white z-30">
+      <div class="px-5 py-6 flex items-center gap-3 border-b border-white/10">
+        <div class="h-10 w-10 rounded-xl bg-marca-600 flex items-center justify-center font-extrabold">AA</div>
+        <div>
+          <p class="font-bold leading-tight">Apps Anabel</p>
+          <p class="text-xs text-slate-400">Sumanpek, C.A.</p>
+        </div>
+      </div>
+      <nav id="nav-lateral" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
+      <div class="p-4 border-t border-white/10">
+        <div class="flex items-center gap-3">
+          <div id="ad-avatar" class="h-9 w-9 rounded-full bg-white/15 flex items-center justify-center text-sm font-bold">–</div>
+          <div class="min-w-0 flex-1">
+            <p id="ad-nombre" class="text-sm font-semibold truncate">–</p>
+            <p id="ad-rol" class="text-xs text-marca-300">–</p>
+          </div>
+          <button data-acc="salir" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10" title="Cerrar sesión"><i data-lucide="log-out" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Barra superior (móvil / tablet) -->
+    <div id="nav-movil" class="lg:hidden sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+      <div class="px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="h-8 w-8 rounded-lg bg-marca-700 text-white flex items-center justify-center text-xs font-extrabold">AA</div>
+          <span class="font-bold">Apps Anabel</span>
+          <span id="ad-rol-movil" class="insignia bg-marca-50 text-marca-700">–</span>
+        </div>
+        <button data-acc="salir" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+      </div>
+      <nav id="nav-movil-items" class="px-4 pb-3 flex gap-2 overflow-x-auto scroll-fino"></nav>
+    </div>
+
+    <main class="lg:ml-64 p-4 sm:p-6 lg:p-8">
+      <div id="print-encabezado" class="mb-4 pb-3 border-b-2 border-slate-800">
+        <p class="text-lg font-bold">Sumanpek, C.A. · Apps Anabel — Recursos Humanos</p>
+        <p id="print-detalle" class="text-sm text-slate-600"></p>
+      </div>
+
+      <!-- ===== DASHBOARD ===== -->
+      <section id="s-dashboard" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Dashboard gerencial</h2>
+            <p id="dash-subtitulo" class="text-sm text-slate-500">–</p>
+          </div>
+          <div class="flex gap-2 no-print">
+            <button data-acc="exportar" data-tabla="t-dash-emp" data-nombre="kpi_empleados" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar</button>
+            <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
+          </div>
+        </div>
+        <div id="dash-filtros" class="no-print mb-5"></div>
+        <div id="dash-kpis" class="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5"></div>
+        <div class="grid xl:grid-cols-3 gap-5 mb-5">
+          <div class="tarjeta p-5 xl:col-span-2">
+            <div class="flex items-center justify-between mb-3"><h3 class="titulo-tarjeta">Asistencia del período</h3><span id="dash-agrupado" class="text-xs text-slate-400"></span></div>
+            <div class="h-72"><canvas id="ch-diario"></canvas></div>
+          </div>
+          <div class="tarjeta p-5">
+            <h3 class="titulo-tarjeta mb-3">Personal activo por departamento</h3>
+            <div class="h-72"><canvas id="ch-deptos"></canvas></div>
+          </div>
+        </div>
+        <div class="grid xl:grid-cols-3 gap-5 mb-5">
+          <div class="tarjeta p-5">
+            <h3 class="titulo-tarjeta mb-3">Puntualidad por departamento</h3>
+            <div class="h-72"><canvas id="ch-puntualidad"></canvas></div>
+          </div>
+          <div class="tarjeta p-5">
+            <h3 class="titulo-tarjeta mb-3">Horas extra por departamento</h3>
+            <div class="h-72"><canvas id="ch-extras"></canvas></div>
+          </div>
+          <div class="tarjeta p-5">
+            <div class="flex items-center justify-between mb-3"><h3 class="titulo-tarjeta">Alertas</h3><span id="dash-alertas-total" class="insignia bg-amber-100 text-amber-700">0</span></div>
+            <div id="dash-alertas" class="space-y-2 max-h-72 overflow-y-auto scroll-fino pr-1"></div>
+          </div>
+        </div>
+        <div class="tarjeta mb-5">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+            <h3 class="titulo-tarjeta">Rendimiento colectivo por departamento</h3>
+            <button data-acc="exportar" data-tabla="t-dash-deptos" data-nombre="kpi_departamentos" class="btn-fantasma btn-sm no-print"><i data-lucide="download" class="w-3.5 h-3.5"></i>CSV</button>
+          </div>
+          <div id="dash-tabla-deptos" class="overflow-x-auto scroll-fino"></div>
+        </div>
+        <div class="tarjeta">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+            <h3 class="titulo-tarjeta">Indicadores por empleado</h3>
+            <button data-acc="exportar" data-tabla="t-dash-emp" data-nombre="kpi_empleados" class="btn-fantasma btn-sm no-print"><i data-lucide="download" class="w-3.5 h-3.5"></i>CSV</button>
+          </div>
+          <div id="dash-tabla-emp" class="overflow-x-auto scroll-fino"></div>
+        </div>
+      </section>
+
+      <!-- ===== EMPLEADOS ===== -->
+      <section id="s-empleados" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Empleados</h2>
+            <p id="emp-subtitulo" class="text-sm text-slate-500">Expedientes digitales del personal</p>
+          </div>
+          <div class="flex gap-2 no-print">
+            <button data-acc="exportar" data-tabla="t-empleados" data-nombre="empleados" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar</button>
+            <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
+            <button data-acc="nuevo-empleado" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Nuevo empleado</button>
+          </div>
+        </div>
+        <div class="tarjeta p-4 mb-5 no-print grid sm:grid-cols-3 gap-3">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+            <input id="emp-buscar" class="campo pl-9" placeholder="Buscar por nombre, cédula, cargo…">
+          </div>
+          <select id="emp-depto" class="campo"></select>
+          <select id="emp-estado" class="campo"></select>
+        </div>
+        <div class="tarjeta"><div id="emp-tabla" class="overflow-x-auto scroll-fino"></div></div>
+      </section>
+
+      <!-- ===== ASISTENCIA ===== -->
+      <section id="s-asistencia" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Control de asistencia</h2>
+            <p id="asis-subtitulo" class="text-sm text-slate-500">–</p>
+          </div>
+          <div class="flex gap-2 no-print">
+            <button data-acc="exportar" data-tabla="t-asistencia" data-nombre="asistencia" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar</button>
+            <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
+            <button data-acc="marcaje-manual" class="btn-primario solo-rrhh"><i data-lucide="pencil" class="w-4 h-4"></i>Registro manual</button>
+          </div>
+        </div>
+        <div id="asis-filtros" class="no-print mb-5"></div>
+        <div id="asis-resumen" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5"></div>
+        <div class="tarjeta"><div id="asis-tabla" class="overflow-x-auto scroll-fino"></div></div>
+      </section>
+
+      <!-- ===== PERMISOS Y VACACIONES ===== -->
+      <section id="s-permisos" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Permisos y vacaciones</h2>
+            <p class="text-sm text-slate-500">Reposos, permisos, faltas justificadas y saldo de vacaciones</p>
+          </div>
+          <div class="flex gap-2 no-print">
+            <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
+            <button data-acc="nuevo-permiso" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Registrar permiso</button>
+          </div>
+        </div>
+        <div class="tarjeta p-4 mb-5 no-print grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+            <input id="per-buscar" class="campo pl-9" placeholder="Buscar empleado…">
+          </div>
+          <select id="per-depto" class="campo"></select>
+          <select id="per-tipo" class="campo"></select>
+          <select id="per-estado" class="campo"></select>
+        </div>
+        <div class="tarjeta mb-5">
+          <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="titulo-tarjeta">Registro de permisos</h3>
+            <button data-acc="exportar" data-tabla="t-permisos" data-nombre="permisos" class="btn-fantasma btn-sm no-print"><i data-lucide="download" class="w-3.5 h-3.5"></i>CSV</button>
+          </div>
+          <div id="per-tabla" class="overflow-x-auto scroll-fino"></div>
+        </div>
+        <div class="tarjeta">
+          <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="titulo-tarjeta">Saldo de vacaciones</h3>
+              <p class="text-xs text-slate-400">Cálculo referencial LOTTT: 15 días el 1.er año + 1 día por año adicional (máx. 30).</p>
+            </div>
+            <button data-acc="exportar" data-tabla="t-vacaciones" data-nombre="saldo_vacaciones" class="btn-fantasma btn-sm no-print"><i data-lucide="download" class="w-3.5 h-3.5"></i>CSV</button>
+          </div>
+          <div id="vac-tabla" class="overflow-x-auto scroll-fino"></div>
+        </div>
+      </section>
+
+      <!-- ===== EVALUACIONES / KPIs ===== -->
+      <section id="s-evaluaciones" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Evaluación de desempeño</h2>
+            <p class="text-sm text-slate-500">Calificaciones periódicas de 0 a 100 por criterio</p>
+          </div>
+          <div class="flex gap-2 no-print">
+            <button data-acc="exportar" data-tabla="t-evaluaciones" data-nombre="evaluaciones" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar</button>
+            <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
+            <button data-acc="nueva-eval" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Nueva evaluación</button>
+          </div>
+        </div>
+        <div class="tarjeta p-4 mb-5 no-print grid sm:grid-cols-3 gap-3">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+            <input id="ev-buscar" class="campo pl-9" placeholder="Buscar empleado…">
+          </div>
+          <select id="ev-depto" class="campo"></select>
+          <input id="ev-periodo" type="month" class="campo" title="Período (vacío = todos)">
+        </div>
+        <div class="grid xl:grid-cols-3 gap-5 mb-5">
+          <div class="tarjeta p-5 xl:col-span-2">
+            <h3 class="titulo-tarjeta mb-3">Promedio por departamento</h3>
+            <div class="h-64"><canvas id="ch-eval-deptos"></canvas></div>
+          </div>
+          <div class="tarjeta p-5">
+            <h3 class="titulo-tarjeta mb-3">Promedio por criterio</h3>
+            <div class="h-64"><canvas id="ch-eval-criterios"></canvas></div>
+          </div>
+        </div>
+        <div class="tarjeta"><div id="ev-tabla" class="overflow-x-auto scroll-fino"></div></div>
+      </section>
+    </main>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
