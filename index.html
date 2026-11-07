@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Sumanpek · Asistencia y RRHH</title>
+  <title>Asistencia Sumanpek, C.A.</title>
+  <meta name="author" content="Anabel Martínez RRHH">
+  <meta name="description" content="Asistencia Sumanpek, C.A. · Sistema de asistencia y Recursos Humanos. © Anabel Martínez RRHH.">
   <meta name="theme-color" content="#031263">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Sumanpek">
+  <meta name="apple-mobile-web-app-title" content="Asistencia">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icono-192.png">
   <meta name="robots" content="noindex, nofollow">
@@ -63,6 +65,8 @@
   </style>
   <style>
     input[type=range] { accent-color: #C10866; }
+    #sidebar { top: var(--franja, 0px); }
+    #nav-movil { top: var(--franja, 0px); }
     .cap1 { display: inline-block; }
     .cap1::first-letter { text-transform: uppercase; }
     body.rol-direccion .solo-rrhh { display: none !important; }
@@ -70,6 +74,8 @@
     .scroll-fino::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
     .girar { animation: girar 0.9s linear infinite; }
     @keyframes girar { to { transform: rotate(360deg); } }
+    @keyframes barra { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+    #barra > div { animation: barra 1.1s ease-in-out infinite; }
     .pulso { animation: pulso 2s ease-in-out infinite; }
     @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
     th[data-acc="ordenar"] { cursor: pointer; }
@@ -96,6 +102,11 @@
 </head>
 
 <body class="bg-slate-100 text-slate-800 font-sans antialiased">
+  <!-- Barra fina de actualización en segundo plano -->
+  <div id="barra" class="no-print fixed top-0 left-0 right-0 h-1 z-[120] overflow-hidden hidden"><div class="h-full w-1/3 bg-gradient-to-r from-marca-700 via-oro-400 to-marca-700"></div></div>
+  <!-- Franja permanente cuando página y servidor tienen versiones distintas -->
+  <div id="franja-version" class="no-print hidden fixed top-0 left-0 right-0 z-[119] bg-oro-400 text-navy-950 shadow-lg"></div>
+  <input id="foto-input" type="file" accept="image/*" class="hidden">
   <canvas id="confeti" class="fixed inset-0 w-full h-full pointer-events-none z-[110]"></canvas>
 
   <!-- ================= INDICADOR DE CARGA ================= -->
@@ -129,8 +140,8 @@
     <div id="login-caja" class="w-full max-w-sm transition-all">
       <div class="bg-white rounded-3xl shadow-2xl p-8 text-center">
         <img src="logo.png" alt="Sumanpek, C.A." class="mx-auto mb-3 h-32 w-32 object-contain drop-shadow-md">
-        <h1 class="text-2xl font-extrabold text-navy-900">Sistema de Asistencia</h1>
-        <p class="text-sm text-slate-500 mt-1">Recursos Humanos · Sumanpek, C.A.</p>
+        <h1 class="text-2xl font-extrabold text-navy-900">Asistencia Sumanpek, C.A.</h1>
+        <p class="text-sm text-slate-500 mt-1">Sistema de asistencia y Recursos Humanos</p>
         <div class="mt-3 mx-auto h-1 w-16 rounded-full bg-gradient-to-r from-marca-700 via-oro-400 to-navy-900"></div>
         <div class="my-7 border-t border-slate-100"></div>
         <div id="login-google">
@@ -141,7 +152,7 @@
         </div>
         <div id="login-acceso" class="hidden text-left"></div>
       </div>
-      <p class="text-center text-xs text-white/60 mt-6">© <span id="anio"></span> Sumanpek, C.A. · Uso interno · Apps Anabel v<span id="version">2.0</span> · <a href="privacidad.html" class="underline hover:text-white">Privacidad</a></p>
+      <p class="text-center text-xs text-white/60 mt-6">Asistencia Sumanpek, C.A. v<span id="version">3.0.0</span> · © <span id="anio"></span> Anabel Martínez RRHH · <a href="privacidad.html" class="underline hover:text-white">Privacidad</a></p>
     </div>
   </section>
 
@@ -152,15 +163,19 @@
         <div class="flex items-center justify-between gap-3 mb-4">
           <div class="flex items-center gap-2">
             <img src="logo.png" alt="Sumanpek" class="h-10 w-10 object-contain">
-            <div class="leading-tight"><p class="text-sm font-bold">Sumanpek, C.A.</p><p class="text-[11px] text-navy-200">Sistema de Asistencia</p></div>
+            <div class="leading-tight"><p class="text-sm font-bold">Asistencia Sumanpek</p><p class="text-[11px] text-navy-200">Sumanpek, C.A.</p></div>
           </div>
           <div class="flex items-center gap-1.5">
+            <button data-acc="instalar-app" class="instalar-app hidden p-2 rounded-xl bg-white/10 hover:bg-white/20" title="Instalar app"><i data-lucide="download" class="w-5 h-5"></i></button>
             <button id="mc-volver" data-acc="ir-panel" class="hidden btn btn-sm bg-oro-400 text-navy-950 hover:bg-oro-300 font-bold"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Gestionar</button>
             <button data-acc="salir" class="p-2 rounded-xl bg-white/10 hover:bg-white/20" title="Cerrar sesión"><i data-lucide="log-out" class="w-5 h-5"></i></button>
           </div>
         </div>
         <div class="flex items-center gap-3 min-w-0">
-          <div id="mc-avatar" class="h-11 w-11 shrink-0 rounded-full bg-marca-700 ring-2 ring-white/30 flex items-center justify-center font-bold">–</div>
+          <button data-acc="cambiar-foto" class="relative shrink-0" title="Cambiar mi foto">
+            <div id="mc-avatar" class="h-12 w-12 rounded-full bg-marca-700 ring-2 ring-white/30 flex items-center justify-center font-bold overflow-hidden">–</div>
+            <span class="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-oro-400 text-navy-950 flex items-center justify-center ring-2 ring-navy-900"><i data-lucide="camera" class="w-3 h-3"></i></span>
+          </button>
           <div class="min-w-0">
             <p id="mc-nombre" class="font-semibold truncate">–</p>
             <p id="mc-cargo" class="text-xs text-navy-200 truncate">–</p>
@@ -193,6 +208,14 @@
         <button data-acc="verificar-ubicacion" class="btn-fantasma btn-sm mt-2 mx-auto"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>Verificar mi ubicación</button>
       </div>
 
+      <div id="mc-proximos" class="tarjeta hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 class="titulo-tarjeta">🎂 Próximos cumpleaños</h3>
+          <span class="text-xs text-slate-400">15 días</span>
+        </div>
+        <div id="mc-proximos-lista" class="divide-y divide-slate-100"></div>
+      </div>
+
       <div id="mc-solicitar" class="tarjeta p-5 flex items-center gap-4">
         <span class="h-11 w-11 rounded-xl bg-oro-100 text-oro-700 flex items-center justify-center shrink-0"><i data-lucide="clipboard-pen" class="w-5 h-5"></i></span>
         <div class="flex-1 min-w-0">
@@ -217,7 +240,8 @@
         </div>
         <div id="mc-historial" class="divide-y divide-slate-100"></div>
       </div>
-      <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.</p>
+      <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.<br>
+        Asistencia Sumanpek, C.A. v<span class="ver-app">3.0.0</span> · © Anabel Martínez RRHH</p>
     </main>
   </section>
 
@@ -235,13 +259,18 @@
       <nav id="nav-lateral" class="flex-1 p-3 space-y-1 overflow-y-auto"></nav>
       <div class="p-4 border-t border-white/10">
         <div class="flex items-center gap-3">
-          <div id="ad-avatar" class="h-9 w-9 rounded-full bg-marca-700 flex items-center justify-center text-sm font-bold">–</div>
+          <button data-acc="cambiar-foto" title="Cambiar mi foto"><div id="ad-avatar" class="h-9 w-9 rounded-full bg-marca-700 flex items-center justify-center text-sm font-bold overflow-hidden">–</div></button>
           <div class="min-w-0 flex-1">
             <p id="ad-nombre" class="text-sm font-semibold truncate">–</p>
             <p id="ad-rol" class="text-xs text-oro-300">–</p>
           </div>
           <button data-acc="salir" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10" title="Cerrar sesión"><i data-lucide="log-out" class="w-4 h-4"></i></button>
         </div>
+        <div class="mt-3 flex gap-2">
+          <button data-acc="compartir-app" class="btn btn-sm flex-1 bg-white/10 text-white hover:bg-white/20"><i data-lucide="qr-code" class="w-4 h-4"></i>Compartir app</button>
+          <button data-acc="instalar-app" class="instalar-app hidden btn btn-sm flex-1 bg-oro-400 text-navy-950 hover:bg-oro-300"><i data-lucide="download" class="w-4 h-4"></i>Instalar</button>
+        </div>
+        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Asistencia Sumanpek, C.A. v<span class="ver-app">3.0.0</span><br>© Anabel Martínez RRHH</p>
       </div>
     </aside>
 
@@ -260,7 +289,7 @@
 
     <main class="lg:ml-64 p-4 sm:p-6 lg:p-8">
       <div id="print-encabezado" class="mb-4 pb-3 border-b-2 border-slate-800">
-        <div class="flex items-center gap-3"><img src="logo.png" alt="" class="h-12 w-12 object-contain"><p class="text-lg font-bold">Sumanpek, C.A. · Sistema de Asistencia y RRHH</p></div>
+        <div class="flex items-center gap-3"><img src="logo.png" alt="" class="h-12 w-12 object-contain"><div><p class="text-lg font-bold">Asistencia Sumanpek, C.A.</p><p class="text-xs text-slate-500">© Anabel Martínez RRHH</p></div></div>
         <p id="print-detalle" class="text-sm text-slate-600"></p>
       </div>
 
@@ -469,6 +498,6 @@
     </main>
   </section>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=3.0.0"></script>
 </body>
 </html>

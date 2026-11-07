@@ -1,6 +1,8 @@
 /**
  * ==========================================================================
- *  APPS ANABEL · Frontend · Sumanpek, C.A.  (v2.2.0 — Fase 2)
+ *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.0.0 — Fase 3)
+ *  © 2026 Anabel Martínez RRHH — Todos los derechos de creación reservados.
+ *  Solución personalizada para Sumanpek, C.A.
  * ==========================================================================
  */
 'use strict';
@@ -13,7 +15,10 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '2.2.0';
+const VERSION = '3.0.0';
+const APP_NOMBRE = 'Asistencia Sumanpek, C.A.';
+const APP_AUTOR = 'Anabel Martínez RRHH';
+const APP_URL = 'https://sumanpek.github.io/';
 
 /* ============================== 2. ESTADO ============================== */
 const S = {
@@ -82,8 +87,8 @@ function campoCedulaHTML(valor = '', { requerido = true } = {}) {
       <select name="TipoDocumento" class="campo !w-20 shrink-0" title="V = venezolano · E = extranjero">
         <option value="V" ${tipo === 'V' ? 'selected' : ''}>V-</option><option value="E" ${tipo === 'E' ? 'selected' : ''}>E-</option>
       </select>
-      <input name="Cedula" class="campo min-w-0" inputmode="numeric" pattern="\\d{5,10}" maxlength="10" ${requerido ? 'required' : ''}
-        value="${esc(numero)}" placeholder="12345678" title="Solo números, sin puntos" oninput="this.value=this.value.replace(/\\D/g,'')">
+      <input name="Cedula" class="campo min-w-0" inputmode="numeric" pattern="\\d{6,8}" minlength="6" maxlength="8" ${requerido ? 'required' : ''}
+        value="${esc(numero)}" placeholder="12345678" title="Solo números, sin puntos (6 a 8 dígitos)" oninput="this.value=this.value.replace(/\\D/g,'')">
     </div></div>`;
 }
 const vacioOpc = t => ({ v: '', t });
@@ -125,6 +130,29 @@ const fmtDinero = v => num(v).toLocaleString('es-VE', { minimumFractionDigits: 2
 const fmtTamano = b => { b = num(b); return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; };
 const minutos = h => { if (!h) return 0; const [a, b, c] = String(h).split(':').map(Number); return (a || 0) * 60 + (b || 0) + (c || 0) / 60; };
 const nombreCompleto = e => e ? `${e.Nombres || ''} ${e.Apellidos || ''}`.trim() : '—';
+const edad = (nac, ref = hoyStr()) => {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(String(nac || ''))) return null;
+  let a = Number(ref.slice(0, 4)) - Number(nac.slice(0, 4));
+  if (ref.slice(5, 10) < nac.slice(5, 10)) a--;
+  return a;
+};
+/** Teléfono → "0412-1234567" ('' si vacío, null si inválido). Igual que en el servidor. */
+function formatearTelefono(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length === 12 && d.startsWith('58')) d = '0' + d.slice(2);
+  else if (d.length === 13 && d.startsWith('580')) d = d.slice(2);
+  else if (d.length === 10 && d[0] !== '0') d = '0' + d;
+  return /^0\d{10}$/.test(d) ? d.slice(0, 4) + '-' + d.slice(4) : null;
+}
+const ATRIB_NOMBRE = `pattern="[\\p{L}][\\p{L}' \\-]*" title="Solo letras (sin números ni símbolos)"`;
+const fotoValida = f => /^[A-Za-z0-9+/=]{100,}$/.test(String(f || ''));
+/** Foto de perfil o, si no hay, las iniciales. */
+function avatarHTML(foto, nombre, clases = 'h-9 w-9 text-xs') {
+  return fotoValida(foto)
+    ? `<img src="data:image/jpeg;base64,${foto}" alt="" class="${clases} rounded-full object-cover shrink-0">`
+    : `<div class="${clases} rounded-full bg-marca-100 text-marca-800 flex items-center justify-center font-bold shrink-0">${esc(iniciales(nombre))}</div>`;
+}
 const iniciales = t => String(t || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('') || '?';
 const normalizar = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const esMovil = () => window.matchMedia('(max-width: 1023px)').matches;
@@ -269,7 +297,19 @@ function descargarBlob(blob, nombre) {
 }
 
 /* ========================= 5. COMUNICACIÓN API ========================= */
+function barra(delta) {
+  S.barra = Math.max(0, (S.barra || 0) + delta);
+  $('#barra').classList.toggle('hidden', !S.barra);
+}
+
+/** Acciones de solo lectura: se permiten aunque las versiones no coincidan. */
+const LECTURAS = new Set(['sesion', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
+  'descargarDocumento', 'descargarSoporte', 'estadoAcceso']);
+
 async function api(action, payload = {}, { silencioso = false, texto = 'Cargando…' } = {}) {
+  if (S.versionDesigual && !LECTURAS.has(action)) {
+    throw new Error('Cambios en pausa: la página y el servidor tienen versiones distintas. Recarga la página en unos minutos.');
+  }
   if (!silencioso) cargando(true, texto);
   try {
     let r;
@@ -370,10 +410,9 @@ function entrarSegunRuta() {
 async function cargarSesion() {
   try {
     S.sesion = await api('sesion', {}, { texto: 'Iniciando sesión…' });
+    verificarVersion();
     entrarSegunRuta();
-    if (esRRHH() && String(S.sesion.version || '1').split('.').slice(0, 2).join('.') !== VERSION.split('.').slice(0, 2).join('.')) {
-      toast(`El servidor está en la versión ${S.sesion.version || '1.x'} y la página en la ${VERSION}. En Apps Script: Implementar → Gestionar implementaciones → ✏️ → Nueva versión.`, 'aviso', 15000);
-    }
+    if (esGestion() && !S.store) asegurarStore().catch(() => {});   // precarga del panel en segundo plano
   } catch (e) {
     if (e.codigo === 'NO_REGISTRADO') return mostrarAcceso();
     if (!S.token) return; // ya se mostró el mensaje en cerrarSesion
@@ -383,8 +422,47 @@ async function cargarSesion() {
   }
 }
 
+/* ---------- Versión: franja permanente + bloqueo de cambios ---------- */
+const cmpVersion = (a, b) => {
+  const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+  return 0;
+};
+function verificarVersion() {
+  const sv = String(S.sesion?.version || '1.0.0');
+  const mm = v => String(v).split('.').slice(0, 2).join('.');
+  const franja = $('#franja-version');
+  if (mm(sv) === mm(VERSION)) {
+    S.versionDesigual = null;
+    franja.classList.add('hidden');
+    document.body.style.paddingTop = '';
+    document.documentElement.style.setProperty('--franja', '0px');
+    return;
+  }
+  S.versionDesigual = { servidor: sv, pagina: VERSION };
+  const paginaVieja = cmpVersion(VERSION, sv) < 0;
+  const detalle = esRRHH()
+    ? (paginaVieja
+      ? `La página está en la v${VERSION} y el servidor en la v${sv}. Sube los archivos nuevos de la página a GitHub y pulsa <b>Recargar</b> en un par de minutos.`
+      : `El servidor está en la v${sv} y la página en la v${VERSION}. En Apps Script: <b>Implementar → Gestionar implementaciones → ✏️ → Nueva versión</b>, y luego pulsa <b>Recargar</b>.`)
+    : 'El sistema se está actualizando. Intenta de nuevo en unos minutos.';
+  franja.innerHTML = `<div class="max-w-6xl mx-auto px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+    <i data-lucide="triangle-alert" class="w-5 h-5 shrink-0"></i>
+    <p class="flex-1 min-w-[200px]"><b>Versiones distintas · cambios en pausa.</b> ${detalle}
+      <span class="block text-xs opacity-80">Puedes consultar la información, pero marcar, guardar o aprobar está bloqueado hasta que ambas versiones coincidan.</span></p>
+    <button data-acc="recargar" class="btn btn-sm bg-navy-900 text-white hover:bg-navy-950"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Recargar</button></div>`;
+  franja.classList.remove('hidden');
+  iconos();
+  requestAnimationFrame(() => {
+    document.body.style.paddingTop = franja.offsetHeight + 'px';
+    document.documentElement.style.setProperty('--franja', franja.offsetHeight + 'px');
+  });
+}
+
 function cerrarSesion(msg = '') {
-  S.token = null; S.sesion = null; S.periodos = {}; S.catalogoListo = false; S.empleados = []; S.permisos = []; S.evaluaciones = [];
+  S.token = null; S.sesion = null; S.store = null; S.versionDesigual = null;
+  $('#franja-version').classList.add('hidden'); document.body.style.paddingTop = '';
+  document.documentElement.style.setProperty('--franja', '0px'); S.catalogoListo = false; S.empleados = []; S.permisos = []; S.evaluaciones = [];
   try { sessionStorage.removeItem('aa_token'); } catch (e) { /* nada */ }
   if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
   Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
@@ -424,15 +502,15 @@ async function mostrarAcceso() {
     <form id="f-acceso" class="space-y-3">
       <div><label class="etiqueta">Correo (verificado por Google)</label><input class="campo bg-slate-50 text-slate-500" value="${esc(d.email)}" disabled></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="etiqueta">Nombres *</label><input name="Nombres" class="campo" required maxlength="60" autocomplete="given-name"></div>
-        <div><label class="etiqueta">Apellidos *</label><input name="Apellidos" class="campo" required maxlength="60" autocomplete="family-name"></div>
+        <div><label class="etiqueta">Nombres *</label><input name="Nombres" class="campo" required maxlength="60" autocomplete="given-name" ${ATRIB_NOMBRE}></div>
+        <div><label class="etiqueta">Apellidos *</label><input name="Apellidos" class="campo" required maxlength="60" autocomplete="family-name" ${ATRIB_NOMBRE}></div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         ${campoCedulaHTML('')}
         <div><label class="etiqueta">Fecha de nacimiento *</label><input name="FechaNacimiento" type="date" class="campo" required max="${hoyStr()}"></div>
       </div>
       <div><label class="etiqueta">Departamento *</label><select name="Departamento" class="campo" required>${deptos}</select></div>
-      <div><label class="etiqueta">Teléfono (opcional)</label><input name="Telefono" type="tel" class="campo" maxlength="20" placeholder="0414-0000000" autocomplete="tel"></div>
+      <div><label class="etiqueta">Teléfono (opcional)</label><input name="Telefono" type="tel" inputmode="tel" data-tel class="campo" maxlength="20" placeholder="0412-1234567" autocomplete="tel"></div>
       <button type="button" data-acc="enviar-acceso" class="btn-primario w-full !mt-5"><i data-lucide="send" class="w-4 h-4"></i>Enviar solicitud</button>
     </form>${otraCuenta}`;
   iconos();
@@ -457,7 +535,7 @@ function mostrarMarcaje() {
   fijarHash('#/asistencia');
   $('#mc-nombre').textContent = s.nombre;
   $('#mc-cargo').textContent = [s.cargo, s.departamento].filter(Boolean).join(' · ') || s.email;
-  $('#mc-avatar').textContent = iniciales(s.nombre);
+  pintarAvatarPropio();
   $('#mc-volver').classList.toggle('hidden', !esGestion());
   $('#mc-horario').textContent = `${s.horario.entrada} – ${s.horario.salida} · sáb. hasta ${s.horario.salidaSabado}`;
   $('#mc-dias-max').textContent = s.diasMaxManual;
@@ -472,20 +550,49 @@ function mostrarMarcaje() {
 }
 
 /* ---------- Cumpleaños: confeti + fanfarria ---------- */
+function pintarAvatarPropio() {
+  const s = S.sesion;
+  if (!s) return;
+  const html = fotoValida(s.fotoMini) ? `<img src="data:image/jpeg;base64,${s.fotoMini}" alt="" class="h-full w-full object-cover">` : esc(iniciales(s.nombre));
+  ['#mc-avatar', '#ad-avatar'].forEach(id => { $(id).innerHTML = html; });
+}
+
+const cuando = d => d === 0 ? '¡Hoy!' : d === 1 ? 'Mañana' : `En ${d} días`;
+
+function pintarProximos() {
+  const s = S.sesion;
+  const lista = (s.proximosCumpleanos || []).filter(c => !(c.id === s.empleadoId && c.dias === 0));
+  $('#mc-proximos').classList.toggle('hidden', !lista.length);
+  $('#mc-proximos-lista').innerHTML = lista.map(c => `
+    <div class="px-5 py-3 flex items-center gap-3">
+      ${avatarHTML(c.foto, c.nombre, 'h-10 w-10 text-xs')}
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-semibold text-slate-800 truncate">${esc(c.nombre)}${c.id === s.empleadoId ? ' <span class="text-xs text-slate-400">(tú)</span>' : ''}</p>
+        <p class="text-xs text-slate-500 truncate">${esc(c.departamento || '')} · cumple <b class="text-marca-700">${c.edad} años</b></p>
+      </div>
+      <div class="text-right shrink-0">
+        <p class="text-xs font-bold ${c.dias === 0 ? 'text-marca-700' : 'text-navy-900'}">${cuando(c.dias)}</p>
+        <p class="text-[11px] text-slate-400">${esc(aFecha(c.fecha).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }))}</p>
+      </div>
+    </div>`).join('');
+}
+
 function pintarCumple() {
   const s = S.sesion, el = $('#mc-cumple');
   const otros = (s.cumpleanerosHoy || []).filter(c => c.id !== s.empleadoId);
+  pintarProximos();
   let html = '';
   if (s.cumpleanos) {
     html += `<div class="tarjeta p-5 text-center shadow-lg border-oro-300 bg-gradient-to-br from-oro-50 via-white to-marca-50">
       <p class="text-4xl mb-1">🎂</p>
       <p class="text-xl font-extrabold text-marca-700">¡Feliz cumpleaños, ${esc(String(s.nombre).split(' ')[0])}!</p>
+      ${s.edadCumple ? `<p class="text-sm font-semibold text-navy-900 mt-1">Hoy cumples ${s.edadCumple} años 🎉</p>` : ''}
       <p class="text-sm text-slate-600 mt-1">Todo el equipo de Sumanpek te desea un día extraordinario.</p>
-      <button data-acc="celebrar" class="btn btn-sm mt-3 bg-navy-900 text-white hover:bg-navy-950">🎉 ¡Celebrar!</button></div>`;
+      <button id="btn-celebrar" data-acc="celebrar" class="btn btn-sm mt-3 bg-navy-900 text-white hover:bg-navy-950">🎉 ¡Celebrar!</button></div>`;
   }
   if (otros.length) {
     html += `<div class="tarjeta px-4 py-3 flex items-center gap-3 bg-oro-50 border-oro-200">
-      <span class="text-2xl">🎈</span><p class="text-sm text-slate-700">Hoy ${otros.length === 1 ? 'cumple' : 'cumplen'} años: <b>${otros.map(o => esc(o.nombre)).join(', ')}</b>. ¡Felicítalos!</p></div>`;
+      <span class="text-2xl">🎈</span><p class="text-sm text-slate-700">Hoy ${otros.length === 1 ? 'cumple' : 'cumplen'} años: <b>${otros.map(o => `${esc(o.nombre)} (${o.edad})`).join(', ')}</b>. ¡Felicítalos!</p></div>`;
   }
   el.innerHTML = html;
   el.className = html ? 'space-y-3' : 'hidden';
@@ -494,7 +601,21 @@ function pintarCumple() {
   if (s.cumpleanos && !celebrado) setTimeout(() => celebrar(), 700);
 }
 
-function celebrar() { lanzarConfeti(); fanfarria(); }
+/** Confeti + "Happy Birthday" (MP3). Si el navegador bloquea el sonido automático, se pide un toque. */
+function celebrar() {
+  lanzarConfeti();
+  try {
+    if (S.musica) { S.musica.pause(); S.musica.currentTime = 0; }
+    S.musica = S.musica || new Audio('cumpleanos.mp3');
+    S.musica.volume = 0.9;
+    S.musica.play().then(() => $('#btn-celebrar')?.classList.remove('animate-bounce')).catch(err => {
+      if (err && err.name === 'NotAllowedError') {
+        const b = $('#btn-celebrar');
+        if (b) { b.textContent = '🔊 Toca para escuchar tu canción'; b.classList.add('animate-bounce'); }
+      } else fanfarria();   // si el archivo no carga, suena la fanfarria sintetizada
+    });
+  } catch (e) { fanfarria(); }
+}
 
 function lanzarConfeti(ms = 4500) {
   const cv = $('#confeti'), ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
@@ -788,7 +909,7 @@ function mostrarAdmin() {
   $('#ad-nombre').textContent = s.nombre;
   $('#ad-rol').textContent = rolTxt;
   $('#ad-rol-movil').textContent = rolTxt;
-  $('#ad-avatar').textContent = iniciales(s.nombre);
+  pintarAvatarPropio();
 
   const deptos = opciones(s.departamentos || [], '', 'Todos los departamentos');
   ['#emp-depto', '#per-depto', '#ev-depto', '#dash-depto', '#asis-depto'].forEach(id => { const el = $(id); if (el) el.innerHTML = deptos; });
@@ -881,34 +1002,78 @@ function textoPeriodo(f) {
   return f.desde === f.hasta ? fmtFecha(f.desde) : `${fmtFecha(f.desde)} — ${fmtFecha(f.hasta)}`;
 }
 
+/* ---------- Almacén local: los datos se muestran al instante y se actualizan en segundo plano ---------- */
+const VIDA_DATOS_MS = 60000;
+function ventanaInicial() {
+  const d = aFecha(hoyStr());
+  return [fechaStr(new Date(d.getFullYear(), d.getMonth() - 1, 1)), fechaStr(new Date(d.getFullYear(), d.getMonth() + 1, 0))];
+}
+
+function aplicarDatos(d) {
+  S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
+  S.solicitudes = d.solicitudes || []; S.accesos = d.accesos || [];
+  S.catalogoListo = true;
+  actualizarInsignia(S.solicitudes.filter(x => x.Estado === 'Pendiente').length);
+  actualizarInsignia(S.accesos.filter(x => x.Estado === 'Pendiente').length, 'empleados');
+}
+
+async function cargarStore(desde, hasta) {
+  const primera = !S.store;
+  if (primera) cargando(true, 'Cargando datos…'); else barra(1);
+  try {
+    const d = await api('datosPeriodo', { desde, hasta }, { silencioso: true });
+    aplicarDatos(d);
+    S.store = { desde, hasta, asistencia: d.asistencia, t: Date.now() };
+  } finally {
+    if (primera) cargando(false); else barra(-1);
+  }
+}
+
+/** Garantiza que el almacén cubra [desde, hasta]. Si está viejo, lo devuelve igual y lo refresca por detrás. */
+async function asegurarStore(desde = null, hasta = null, { forzar = false } = {}) {
+  if (!desde) [desde, hasta] = ventanaInicial();
+  const st = S.store;
+  if (st && !forzar && st.desde <= desde && st.hasta >= hasta) {
+    if (Date.now() - st.t > VIDA_DATOS_MS) refrescarFondo();
+    return;
+  }
+  if (S.cargandoStore) await S.cargandoStore;
+  const d0 = st ? (desde < st.desde ? desde : st.desde) : desde;
+  const h0 = st ? (hasta > st.hasta ? hasta : st.hasta) : hasta;
+  const largo = (aFecha(h0) - aFecha(d0)) / 864e5 > 390;
+  S.cargandoStore = cargarStore(largo ? desde : d0, largo ? hasta : h0);
+  try { await S.cargandoStore; } finally { S.cargandoStore = null; }
+}
+
+function refrescarFondo() {
+  if (S.refrescando || !S.store) return;
+  S.refrescando = true;
+  cargarStore(S.store.desde, S.store.hasta)
+    .then(() => redibujar())
+    .catch(() => { /* se reintenta en la próxima navegación */ })
+    .finally(() => { S.refrescando = false; });
+}
+
+function redibujar() {
+  if (!S.sesion || $('#v-admin').classList.contains('hidden')) return;
+  const fn = { dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
+    permisos: cargarPermisos, evaluaciones: cargarEvaluaciones }[S.seccion];
+  if (fn) fn();
+}
+
 async function datosPeriodo(p, forzar) {
   const f = leerFiltro(p);
-  const c = S.periodos[p];
-  const vencido = !c || Date.now() - c.t > 60000;   // los datos se renuevan solos después de 1 minuto
-  if (forzar || vencido || c.desde !== f.desde || c.hasta !== f.hasta) {
-    const d = await api('datosPeriodo', { desde: f.desde, hasta: f.hasta }, { texto: 'Consultando datos…' });
-    S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
-    S.solicitudes = d.solicitudes || [];
-    actualizarInsignia(S.solicitudes.filter(x => x.Estado === 'Pendiente').length);
-    S.accesos = d.accesos || [];
-    actualizarInsignia(S.accesos.filter(x => x.Estado === 'Pendiente').length, 'empleados');
-    S.catalogoListo = true;
-    S.periodos[p] = { desde: f.desde, hasta: f.hasta, asistencia: d.asistencia, t: Date.now() };
-  }
-  return { f, asistencia: S.periodos[p].asistencia };
+  await asegurarStore(f.desde, f.hasta, { forzar });
+  return { f, asistencia: S.store.asistencia.filter(a => a.Fecha >= f.desde && a.Fecha <= f.hasta) };
 }
 
 async function asegurarCatalogo(forzar = false) {
-  if (!forzar && S.catalogoListo) return;
-  const h = hoyStr();
-  const d = await api('datosPeriodo', { desde: h, hasta: h }, { texto: 'Cargando…' });
-  S.empleados = d.empleados; S.permisos = d.permisos; S.evaluaciones = d.evaluaciones;
-  S.solicitudes = d.solicitudes || [];
-  S.accesos = d.accesos || [];
-  S.catalogoListo = true;
+  if (forzar) { refrescarFondo(); if (S.store) return; }
+  await asegurarStore();
 }
 
-function invalidarCache() { S.periodos = {}; }
+/** Marca los datos como viejos: se muestran igual y se actualizan por detrás. */
+function invalidarCache() { if (S.store) S.store.t = 0; }
 
 /* ======================= 9. MOTOR DE KPIs ======================= */
 function empleadosDelPeriodo(desde, hasta, depto, q) {
@@ -1273,6 +1438,15 @@ function pintarManualesDashboard(asistencia, ids) {
   ], lista, { vacio: 'No hubo marcajes manuales en este período.' });
 }
 
+/** Próximo cumpleaños de un empleado: { fecha, dias, edad }. */
+function proximoCumple(e, hoy = hoyStr()) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(String(e.FechaNacimiento || ''))) return null;
+  const md = e.FechaNacimiento.slice(5, 10) === '02-29' ? '02-28' : e.FechaNacimiento.slice(5, 10);
+  let fecha = hoy.slice(0, 4) + '-' + md;
+  if (fecha < hoy) fecha = (Number(hoy.slice(0, 4)) + 1) + '-' + md;
+  return { fecha, dias: Math.round((aFecha(fecha) - aFecha(hoy)) / 864e5), edad: Number(fecha.slice(0, 4)) - Number(e.FechaNacimiento.slice(0, 4)) };
+}
+
 function pintarAlertas(depto, q) {
   const hoy = hoyStr(), en30 = sumarDias(hoy, 30), en7 = sumarDias(hoy, 7);
   const emps = S.empleados.filter(e => e.Estado !== 'Inactivo' && (!depto || e.Departamento === depto) && coincide(e, q));
@@ -1290,7 +1464,8 @@ function pintarAlertas(depto, q) {
     const v = saldoVacaciones(e);
     if (v && v.pendientes >= 30) item('sun', 'azul', `Vacaciones acumuladas: ${nombreCompleto(e)}`, `${v.pendientes} días pendientes por disfrutar`, e.ID);
     if (!e.Email) item('mail-x', 'gris', `Sin correo registrado: ${nombreCompleto(e)}`, 'No podrá marcar asistencia', e.ID);
-    if (e.FechaNacimiento && e.FechaNacimiento.slice(5, 7) === hoy.slice(5, 7)) item('cake', 'violeta', `Cumpleaños este mes: ${nombreCompleto(e)}`, fmtFecha(hoy.slice(0, 4) + e.FechaNacimiento.slice(4)), e.ID);
+    const pc = proximoCumple(e, hoy);
+    if (pc && pc.dias <= 15) item('cake', 'violeta', `Cumpleaños: ${nombreCompleto(e)} cumple ${pc.edad} años`, pc.dias === 0 ? '¡Hoy!' : `${fmtFecha(pc.fecha)} · ${cuando(pc.dias).toLowerCase()}`, e.ID);
   });
   S.permisos.filter(p => ids.has(p.EmpleadoID)).forEach(p => {
     const e = empPorId(p.EmpleadoID);
@@ -1313,13 +1488,7 @@ function pintarAlertas(depto, q) {
 
 /* ======================= 13. EMPLEADOS ======================= */
 async function cargarEmpleados(forzar = false) {
-  try {
-    if (forzar || !S.empleados.length) {
-      const d = await api('listarEmpleados', {}, { texto: 'Cargando empleados…' });
-      S.empleados = d.empleados;
-      S.accesos = d.accesos || [];
-    }
-  } catch (e) { return toast(e.message, 'error'); }
+  try { await asegurarStore(null, null, { forzar }); } catch (e) { return toast(e.message, 'error'); }
   pintarEmpleados();
   pintarAccesos();
 }
@@ -1337,7 +1506,7 @@ function pintarAccesos() {
     { t: 'Departamento', v: x => esc(x.Departamento), s: x => x.Departamento },
     { t: 'Teléfono', v: x => esc(x.Telefono || '—') },
     { t: 'Enviada', v: x => `<span class="text-xs text-slate-500">${esc(String(x.Creado).slice(0, 16))}</span>`, s: x => x.Creado },
-    { t: 'Observación', v: x => x.Nota ? `<span class="text-xs font-semibold text-amber-700">${esc(x.Nota)}</span>` : '<span class="text-xs text-emerald-600">Sin coincidencias</span>', cls: 'envolver' },
+    { t: 'Observación', v: x => (x.Nota || x.NotaTelefono) ? [x.Nota, x.NotaTelefono].filter(Boolean).map(n => `<p class="text-xs font-semibold text-amber-700">${esc(n)}</p>`).join('') : '<span class="text-xs text-emerald-600">Sin coincidencias</span>', cls: 'envolver' },
     { t: '', v: x => `<div class="flex justify-end gap-1 solo-rrhh whitespace-nowrap">
         <button data-acc="revisar-solicitud-acceso" data-id="${esc(x.ID)}" class="btn btn-sm bg-emerald-50 text-emerald-700 hover:bg-emerald-100"><i data-lucide="user-check" class="w-4 h-4"></i>Revisar y aprobar</button>
         <button data-acc="rechazar-acceso" data-id="${esc(x.ID)}" class="btn btn-sm bg-rose-50 text-rose-700 hover:bg-rose-100"><i data-lucide="x" class="w-4 h-4"></i>Rechazar</button></div>`, cls: 'text-right' }
@@ -1383,11 +1552,12 @@ function pintarEmpleados() {
   $('#emp-subtitulo').textContent = `${activos} activos · ${S.empleados.length} expedientes en total`;
   $('#print-detalle').textContent = `Listado de empleados · ${lista.length} registros · Impreso: ${new Date().toLocaleString('es-VE')}`;
   renderTabla('emp-tabla', 't-empleados', [
-    { t: 'Empleado', v: e => `<div class="flex items-center gap-3"><div class="h-9 w-9 rounded-full bg-marca-100 text-marca-800 flex items-center justify-center text-xs font-bold shrink-0">${esc(iniciales(nombreCompleto(e)))}</div><div><button data-acc="ver-expediente" data-id="${esc(e.ID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(e))}</button><div class="text-xs text-slate-400">${esc(e.Email || 'sin correo')}</div></div></div>`, s: e => nombreCompleto(e), c: e => nombreCompleto(e) },
+    { t: 'Empleado', v: e => `<div class="flex items-center gap-3">${avatarHTML(e.FotoMini, nombreCompleto(e))}<div><button data-acc="ver-expediente" data-id="${esc(e.ID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(e))}</button><div class="text-xs text-slate-400">${esc(e.Email || 'sin correo')}</div></div></div>`, s: e => nombreCompleto(e), c: e => nombreCompleto(e) },
     { t: 'ID', v: e => `<span class="text-xs font-mono text-slate-500">${esc(e.ID)}</span>`, s: e => e.ID, c: e => e.ID },
     { t: 'Cédula', v: e => esc(e.Cedula), s: e => e.Cedula, c: e => e.Cedula },
     { t: 'Departamento', v: e => esc(e.Departamento), s: e => e.Departamento, c: e => e.Departamento },
     { t: 'Cargo', v: e => esc(e.Cargo || '—'), s: e => e.Cargo, c: e => e.Cargo },
+    { t: 'Edad', v: e => edad(e.FechaNacimiento) ?? '—', s: e => edad(e.FechaNacimiento), c: e => edad(e.FechaNacimiento) ?? '', cls: 'text-right' },
     { t: 'Ingreso', v: e => fmtFecha(e.FechaIngreso), s: e => e.FechaIngreso, c: e => e.FechaIngreso },
     { t: 'Estado', v: e => insigniaEstado(e.Estado), s: e => e.Estado, c: e => e.Estado },
     { t: 'Teléfono', v: e => esc(e.Telefono || '—'), c: e => e.Telefono, cls: 'hidden xl:table-cell' },
@@ -1429,9 +1599,9 @@ function formEmpleado(id = null, { acceso = null, base = {} } = {}) {
       <input type="hidden" name="ID" value="${esc(e.ID || '')}">
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos personales</legend>
         <div class="grid sm:grid-cols-2 gap-4">
-          ${c('Nombres', 'Nombres *', 'text', 'required')}${c('Apellidos', 'Apellidos *', 'text', 'required')}
+          ${c('Nombres', 'Nombres *', 'text', 'required ' + ATRIB_NOMBRE)}${c('Apellidos', 'Apellidos *', 'text', 'required ' + ATRIB_NOMBRE)}
           ${campoCedulaHTML(e.Cedula)}${c('FechaNacimiento', 'Fecha de nacimiento', 'date')}
-          ${c('Telefono', 'Teléfono', 'tel', 'placeholder="0414-0000000"')}
+          ${c('Telefono', 'Teléfono', 'tel', 'data-tel inputmode="tel" placeholder="0412-1234567"')}
           ${c('Email', 'Correo de Google (Gmail) para iniciar sesión', 'email', acceso ? 'readonly style="background:#f8fafc;color:#64748b"' : 'placeholder="nombre@gmail.com"')}
           <div class="sm:col-span-2">${c('Direccion', 'Dirección de habitación')}</div>
         </div></fieldset>
@@ -1455,7 +1625,7 @@ function formEmpleado(id = null, { acceso = null, base = {} } = {}) {
         </div></fieldset>
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Contacto de emergencia</legend>
         <div class="grid sm:grid-cols-3 gap-4">
-          ${c('EmergenciaNombre', 'Nombre')}${c('EmergenciaTelefono', 'Teléfono', 'tel')}${c('EmergenciaParentesco', 'Parentesco')}
+          ${c('EmergenciaNombre', 'Nombre')}${c('EmergenciaTelefono', 'Teléfono', 'tel', 'data-tel inputmode="tel" placeholder="0412-1234567"')}${c('EmergenciaParentesco', 'Parentesco')}
         </div></fieldset>
       <div><label class="etiqueta">Notas internas</label><textarea name="Notas" rows="2" class="campo">${esc(e.Notas || '')}</textarea></div>
     </form>`,
@@ -1490,6 +1660,7 @@ async function guardarEmpleado() {
     if (i >= 0) S.empleados[i] = r; else S.empleados.push(r);
     invalidarCache();
     toast(datos.ID ? 'Expediente actualizado.' : `Empleado creado con ID ${r.ID}.`, 'ok');
+    (r._avisos || []).forEach(a => toast(a, 'aviso', 9000));
     if (datos.ID && S.modalVolver) verExpediente(r.ID, S.expTab);
     else if (!datos.ID) verExpediente(r.ID, 'documentos');
     else cerrarModal();
@@ -1509,7 +1680,11 @@ async function verExpediente(id, tab = 'datos') {
       ancho: 'sm:max-w-5xl',
       cuerpo: `
         <div class="flex flex-wrap items-center gap-4 mb-5">
-          <div class="h-16 w-16 rounded-2xl bg-marca-700 text-white flex items-center justify-center text-xl font-extrabold">${esc(iniciales(nombreCompleto(e)))}</div>
+          <div class="relative shrink-0">
+            ${fotoValida(e.FotoMini) ? `<img src="data:image/jpeg;base64,${e.FotoMini}" alt="" class="h-16 w-16 rounded-2xl object-cover">`
+              : `<div class="h-16 w-16 rounded-2xl bg-marca-700 text-white flex items-center justify-center text-xl font-extrabold">${esc(iniciales(nombreCompleto(e)))}</div>`}
+            <button data-acc="cambiar-foto" data-id="${esc(e.ID)}" class="solo-rrhh no-print absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-oro-400 text-navy-950 flex items-center justify-center ring-2 ring-white" title="Cambiar foto"><i data-lucide="camera" class="w-3.5 h-3.5"></i></button>
+          </div>
           <div class="flex-1 min-w-0">
             <div class="flex flex-wrap items-center gap-2"><h4 class="text-xl font-extrabold text-slate-900">${esc(nombreCompleto(e))}</h4>${insigniaEstado(e.Estado)}</div>
             <p class="text-sm text-slate-500">${esc([e.Cargo, e.Departamento].filter(Boolean).join(' · '))} · <span class="font-mono text-xs">${esc(e.ID)}</span> · C.I. ${esc(e.Cedula)}</p>
@@ -1552,7 +1727,7 @@ function expDatos({ empleado: e }) {
   })() : '';
   const bloque = (t, campos) => `<div class="tarjeta p-5"><h5 class="font-bold text-sm text-marca-700 mb-4">${t}</h5><div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">${campos.join('')}</div></div>`;
   return `<div class="space-y-4">
-    ${bloque('Datos personales', [campoLectura('Cédula', esc(e.Cedula)), campoLectura('Fecha de nacimiento', e.FechaNacimiento ? fmtFecha(e.FechaNacimiento) : ''),
+    ${bloque('Datos personales', [campoLectura('Cédula', esc(e.Cedula)), campoLectura('Fecha de nacimiento', e.FechaNacimiento ? `${fmtFecha(e.FechaNacimiento)} <span class="text-slate-500">(${edad(e.FechaNacimiento)} años)</span>` : ''),
       campoLectura('Teléfono', esc(e.Telefono)), campoLectura('Correo (inicio de sesión)', esc(e.Email)), campoLectura('Dirección', esc(e.Direccion))])}
     ${bloque('Datos laborales', [campoLectura('Departamento', esc(e.Departamento)), campoLectura('Cargo', esc(e.Cargo)),
       campoLectura('Fecha de ingreso', e.FechaIngreso ? fmtFecha(e.FechaIngreso) : ''), campoLectura('Antigüedad', antig),
@@ -1863,7 +2038,7 @@ async function formMarcajeManual(id = null) {
   try { await asegurarCatalogo(); } catch (e) { return toast(e.message, 'error'); }
   let a = { Fecha: hoyStr(), Entrada: '', Salida: '', Observacion: '' };
   if (id) {
-    const todos = Object.values(S.periodos).flatMap(p => p.asistencia);
+    const todos = S.store ? S.store.asistencia : [];
     a = todos.find(x => x.ID === id) || a;
   }
   const activos = S.empleados.filter(e => e.Estado !== 'Inactivo').sort(ordenarNombre);
@@ -2149,6 +2324,103 @@ async function borrarEvaluacion(id) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+/* ======================= 17b. FOTO DE PERFIL ======================= */
+async function procesarFoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('No se pudo leer la imagen. Prueba con una foto JPG o PNG.'));
+      i.src = url;
+    });
+    const lado = Math.min(img.width, img.height), sx = (img.width - lado) / 2, sy = (img.height - lado) / 2;
+    const recorte = (px, q) => {
+      const c = document.createElement('canvas');
+      c.width = c.height = px;
+      const x = c.getContext('2d');
+      x.imageSmoothingQuality = 'high';
+      x.drawImage(img, sx, sy, lado, lado, 0, 0, px, px);
+      return c.toDataURL('image/jpeg', q).split(',')[1];
+    };
+    return { mini: recorte(128, 0.8), grande: recorte(512, 0.85) };
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function cambiarFoto(empleadoId = null) {
+  if (!empleadoId && !S.sesion?.empleadoId) return toast('Tu correo no tiene expediente de empleado, así que no puedes tener foto de perfil.', 'aviso');
+  S.fotoDestino = empleadoId;
+  const inp = $('#foto-input');
+  inp.value = '';
+  inp.click();
+}
+
+async function subirFotoElegida(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) return toast('Elige una imagen (JPG o PNG).', 'aviso');
+  try {
+    cargando(true, 'Preparando foto…');
+    let f;
+    try { f = await procesarFoto(file); } finally { cargando(false); }
+    const r = await api('subirFoto', { empleadoId: S.fotoDestino || undefined, mini: f.mini, grande: f.grande }, { texto: 'Subiendo foto…' });
+    const emp = empPorId(r.empleadoId);
+    if (emp) emp.FotoMini = r.FotoMini;
+    if (r.empleadoId === S.sesion.empleadoId) { S.sesion.fotoMini = r.FotoMini; pintarAvatarPropio(); }
+    toast('¡Foto actualizada!', 'ok');
+    if (S.exp && S.exp.empleado.ID === r.empleadoId) verExpediente(r.empleadoId, S.expTab);
+    if (S.seccion === 'empleados' && !$('#v-admin').classList.contains('hidden')) pintarEmpleados();
+  } catch (e) { toast(e.message, 'error', 6000); }
+}
+
+/* ======================= 17c. APP INSTALABLE Y COMPARTIR ======================= */
+let eventoInstalar = null;
+const esStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+function mostrarBotonesInstalar() {
+  const ver = !esStandalone() && (!!eventoInstalar || esIOS());
+  $$('.instalar-app').forEach(b => b.classList.toggle('hidden', !ver));
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); eventoInstalar = e; mostrarBotonesInstalar(); });
+window.addEventListener('appinstalled', () => { eventoInstalar = null; mostrarBotonesInstalar(); toast('¡App instalada! Búscala en tu pantalla de inicio.', 'ok', 6000); });
+
+async function instalarApp() {
+  if (eventoInstalar) {
+    eventoInstalar.prompt();
+    try { await eventoInstalar.userChoice; } catch (e) { /* nada */ }
+    eventoInstalar = null;
+    return mostrarBotonesInstalar();
+  }
+  abrirModal({
+    titulo: 'Instalar la app',
+    ancho: 'sm:max-w-md',
+    cuerpo: `<div class="space-y-3 text-sm text-slate-700">
+      <p><b>iPhone (Safari):</b> toca el botón <b>Compartir</b> <i data-lucide="share" class="w-4 h-4 inline"></i> y luego <b>"Agregar a inicio"</b>.</p>
+      <p><b>Android (Chrome):</b> menú <b>⋮</b> → <b>"Instalar aplicación"</b> o <b>"Agregar a pantalla principal"</b>.</p>
+      <p class="text-xs text-slate-500">La app queda con el logo de Sumanpek y abre a pantalla completa.</p></div>`,
+    pie: `<button data-acc="cerrar-modal" class="btn-primario">Entendido</button>`
+  });
+}
+
+function compartirApp() {
+  abrirModal({
+    titulo: 'Compartir la app con el personal',
+    ancho: 'sm:max-w-md',
+    cuerpo: `<div class="text-center">
+      <img src="qr-app.png" alt="Código QR de ${esc(APP_URL)}" class="mx-auto h-56 w-56 rounded-xl border border-slate-200 p-2 bg-white">
+      <p class="mt-3 font-mono text-sm text-navy-900 break-all">${esc(APP_URL)}</p>
+      <p class="mt-2 text-xs text-slate-500">Escanéalo con la cámara del teléfono, inicia sesión con tu Gmail y toca <b>Instalar</b>.</p>
+      <div class="mt-4 flex flex-wrap justify-center gap-2">
+        <button data-acc="copiar-enlace" class="btn-sec btn-sm"><i data-lucide="copy" class="w-4 h-4"></i>Copiar enlace</button>
+        <a href="cartel-qr.pdf" target="_blank" class="btn-primario btn-sm"><i data-lucide="printer" class="w-4 h-4"></i>Cartel para imprimir</a>
+      </div></div>`
+  });
+}
+
+async function copiarEnlace() {
+  try { await navigator.clipboard.writeText(APP_URL); toast('Enlace copiado.', 'ok'); }
+  catch (e) { toast(APP_URL, 'info', 8000); }
+}
+
 /* ======================= 18. IMPRESIÓN ======================= */
 function imprimir() { setTimeout(() => window.print(), 50); }
 function imprimirModal() {
@@ -2204,12 +2476,34 @@ const ACC = {
   'revisar-acceso': () => mostrarAcceso(),
   'revisar-solicitud-acceso': d => revisarAcceso(d.id),
   'rechazar-acceso': d => rechazarAcceso(d.id),
-  'vincular-acceso': d => vincularAcceso(d.id, d.emp)
+  'vincular-acceso': d => vincularAcceso(d.id, d.emp),
+  'cambiar-foto': d => cambiarFoto(d.id || null),
+  'instalar-app': () => instalarApp(),
+  'compartir-app': () => compartirApp(),
+  'copiar-enlace': () => copiarEnlace(),
+  'recargar': () => location.reload()
 };
 
 function prepararUI() {
   $('#anio').textContent = new Date().getFullYear();
   $('#version').textContent = VERSION;
+  $$('.ver-app').forEach(e => { e.textContent = VERSION; });
+  $('#foto-input').addEventListener('change', ev => subirFotoElegida(ev.target.files[0]));
+  // Teléfonos: se ordenan al salir del campo (0412-1234567) y se marcan si son inválidos
+  document.addEventListener('focusout', ev => {
+    const i = ev.target;
+    if (!i.matches || !i.matches('[data-tel]')) return;
+    const v = formatearTelefono(i.value);
+    if (v === null) { i.setCustomValidity('Número inválido: debe tener 11 dígitos, por ejemplo 0412-1234567.'); i.reportValidity(); return; }
+    i.value = v; i.setCustomValidity('');
+    const form = i.closest('#f-empleado');
+    if (v && form && i.name === 'Telefono') {
+      const otro = S.empleados.find(e => e.ID !== form.ID.value && formatearTelefono(e.Telefono) === v);
+      if (otro) toast(`Este teléfono ya está registrado en ${otro.ID} (${nombreCompleto(otro)}).`, 'aviso', 7000);
+    }
+  });
+  document.addEventListener('input', ev => { if (ev.target.matches && ev.target.matches('[data-tel]')) ev.target.setCustomValidity(''); });
+  mostrarBotonesInstalar();
   $('#ev-periodo-cont').innerHTML = selectorMesHTML('ev-periodo', '', { vacio: 'Todos los períodos' });
   construirNavegacion();
   prepararFiltro('dash', 'semana', forzar => cargarDashboard(forzar));
@@ -2247,6 +2541,9 @@ function prepararUI() {
 /* ======================= 20. ARRANQUE ======================= */
 document.addEventListener('DOMContentLoaded', () => {
   prepararUI();
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js?v=' + VERSION).catch(() => { /* sin service worker */ });
+  }
   if (!configValida()) {
     mostrarLogin('⚙️ Configuración pendiente: escribe API_URL y GOOGLE_CLIENT_ID al inicio del archivo app.js.');
     return;
