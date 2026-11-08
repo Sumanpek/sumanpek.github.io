@@ -2,13 +2,13 @@
  * Asistencia Sumanpek, C.A. · Service worker
  * © 2026 Anabel Martínez RRHH
  *
- * - Página y código (index.html, app.js): primero la red y, si no hay conexión, la copia guardada.
- *   Así nunca se queda pegada una versión vieja.
+ * - Página y código (index.html, app.js): primero la red (sin usar la caché del navegador) y, si no hay
+ *   conexión, la copia guardada. Así nunca se queda pegada una versión vieja.
  * - Librerías (Tailwind, Chart.js, íconos, fuentes): copia guardada al instante y se actualiza por detrás.
  * - Imágenes y sonido propios: copia guardada.
  * - La API de Google (script.google.com) y el inicio de sesión NUNCA se guardan.
  */
-const VERSION_SW = 'asistencia-sumanpek-3.0.0';
+const VERSION_SW = 'asistencia-sumanpek-3.1.0';
 const BASICOS = ['./', 'index.html', 'logo.png', 'icono-192.png', 'icono-512.png', 'manifest.webmanifest'];
 const CDN = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const NUNCA = ['script.google.com', 'script.googleusercontent.com', 'accounts.google.com', 'oauth2.googleapis.com'];
@@ -47,8 +47,11 @@ self.addEventListener('fetch', ev => {
     return;
   }
 
-  // HTML, JS y demás: red primero
-  ev.respondWith(fetch(req).then(r => {
+  // HTML, JS y demás: red primero, pidiendo siempre la versión más reciente publicada
+  const fresco = fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' })
+    .then(r => (r.redirected || !r.ok) ? fetch(req) : r)
+    .catch(() => fetch(req));
+  ev.respondWith(fresco.then(r => {
     if (r.ok) { const copia = r.clone(); caches.open(VERSION_SW).then(c => c.put(req, copia)); }
     return r;
   }).catch(() => caches.match(req).then(g => g || caches.match('index.html'))));

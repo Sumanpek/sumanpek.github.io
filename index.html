@@ -7,6 +7,7 @@
   <meta name="author" content="Anabel Martínez RRHH">
   <meta name="description" content="Asistencia Sumanpek, C.A. · Sistema de asistencia y Recursos Humanos. © Anabel Martínez RRHH.">
   <meta name="theme-color" content="#031263">
+  <script>try { if (localStorage.getItem('aa_tema') === 'oscuro') document.documentElement.classList.add('dark'); } catch (e) { /* nada */ }</script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Asistencia">
   <link rel="manifest" href="manifest.webmanifest">
@@ -79,6 +80,78 @@
     .pulso { animation: pulso 2s ease-in-out infinite; }
     @keyframes pulso { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
     th[data-acc="ordenar"] { cursor: pointer; }
+    body.rol-direccion:not(.dir-aprueba) .aprobador { display: none !important; }
+    /* Reporte mensual */
+    .rep-tabla { width: 100%; font-size: 12px; border-collapse: collapse; }
+    .rep-tabla th { text-align: left; background: #eef1fb; color: #031263; padding: 6px 8px; font-weight: 700; border-bottom: 2px solid #031263; white-space: nowrap; }
+    .rep-tabla td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+    .rep-tabla tfoot td { font-weight: 800; border-top: 2px solid #031263; border-bottom: 0; background: #f8fafc; }
+    .rep-tabla th.text-right, .rep-tabla td.text-right { text-align: right; }
+    html.dark .rep-tabla th { background: #1a2540; color: #c9d2f5; border-color: #5468c4; }
+    html.dark .rep-tabla td { border-color: #26324f; }
+    html.dark .rep-tabla tfoot td { background: #1a2540; border-color: #5468c4; }
+    @media print { .rep-tabla th { background: #eef1fb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .rep-tabla tr { break-inside: avoid; } }
+    /* Recorte de foto */
+    #rec-marco { touch-action: none; user-select: none; -webkit-user-select: none; }
+    #rec-mascara { background: radial-gradient(circle closest-side at center, transparent 99%, rgba(2, 11, 63, .62) 100%); }
+    /* ========== Modo oscuro (solo cambia fondos y textos; los colores de marca se mantienen) ========== */
+    html.dark { color-scheme: dark; }
+    html.dark body { background-color: #0b1120 !important; color: #e2e8f0; }
+    html.dark .bg-white, html.dark .tarjeta, html.dark #modal-caja, html.dark .confirmacion > div { background-color: #131c31 !important; }
+    html.dark .bg-white\/95 { background-color: rgba(19, 28, 49, .95) !important; }
+    html.dark .bg-white\/60 { background-color: rgba(11, 17, 32, .65) !important; }
+    html.dark .bg-slate-50, html.dark .bg-slate-100, html.dark .bg-slate-50\/70, html.dark #modal-pie { background-color: #1a2540 !important; }
+    html.dark .bg-slate-200 { background-color: #26324f !important; }
+    html.dark .tarjeta, html.dark .border-slate-100, html.dark .border-slate-200, html.dark .border-slate-200\/80, html.dark .border-slate-300,
+    html.dark .border-b, html.dark .border-t, html.dark .divide-slate-100 > * + * { border-color: #26324f !important; }
+    html.dark .text-slate-900, html.dark .text-slate-800 { color: #f1f5f9 !important; }
+    html.dark .text-slate-700 { color: #e2e8f0 !important; }
+    html.dark .text-slate-600 { color: #cbd5e1 !important; }
+    html.dark .text-slate-500 { color: #9aa8bd !important; }
+    html.dark .text-slate-400 { color: #7f8ea6 !important; }
+    html.dark .text-slate-300 { color: #4b5873 !important; }
+    html.dark .text-navy-900, html.dark .text-navy-950 { color: #c9d2f5 !important; }
+    html.dark .text-navy-700, html.dark .text-navy-600 { color: #a8b5ee !important; }
+    html.dark .text-marca-700, html.dark .text-marca-800 { color: #f07bb3 !important; }
+    html.dark .text-oro-700 { color: #f5dc47 !important; }
+    html.dark .bg-marca-50, html.dark .bg-marca-100 { background-color: rgba(193, 8, 102, .2) !important; }
+    html.dark .bg-navy-50, html.dark .bg-navy-100 { background-color: rgba(84, 104, 196, .2) !important; }
+    html.dark .bg-oro-50, html.dark .bg-oro-100 { background-color: rgba(238, 207, 21, .14) !important; }
+    html.dark .bg-emerald-50, html.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, .16) !important; }
+    html.dark .bg-amber-50, html.dark .bg-amber-100 { background-color: rgba(245, 158, 11, .16) !important; }
+    html.dark .bg-rose-50, html.dark .bg-rose-100 { background-color: rgba(244, 63, 94, .16) !important; }
+    html.dark .bg-sky-50, html.dark .bg-sky-100, html.dark .bg-blue-50 { background-color: rgba(14, 165, 233, .16) !important; }
+    html.dark .bg-violet-50 { background-color: rgba(139, 92, 246, .18) !important; }
+    html.dark .text-emerald-700, html.dark .text-emerald-800, html.dark .text-emerald-600 { color: #6ee7b7 !important; }
+    html.dark .text-amber-700, html.dark .text-amber-800, html.dark .text-amber-600 { color: #fcd34d !important; }
+    html.dark .text-rose-700, html.dark .text-rose-600 { color: #fda4af !important; }
+    html.dark .text-sky-700, html.dark .text-sky-600, html.dark .text-blue-600 { color: #7dd3fc !important; }
+    html.dark .text-violet-700, html.dark .text-violet-600 { color: #c4b5fd !important; }
+    html.dark .border-rose-200, html.dark .border-amber-200, html.dark .border-emerald-200, html.dark .border-marca-200,
+    html.dark .border-oro-200, html.dark .border-oro-300, html.dark .border-navy-100, html.dark .border-navy-200 { border-color: rgba(148, 163, 184, .25) !important; }
+    html.dark .hover\:bg-slate-50:hover, html.dark .hover\:bg-slate-100:hover, html.dark .tabla tbody tr:hover { background-color: #1e2a47 !important; }
+    html.dark .campo { background-color: #0e1629 !important; border-color: #334155 !important; color: #e2e8f0 !important; }
+    html.dark .campo::placeholder { color: #64748b; }
+    html.dark .btn-sec { background-color: #1a2540 !important; border-color: #334155 !important; color: #e2e8f0 !important; }
+    html.dark .btn-fantasma { color: #cbd5e1 !important; }
+    html.dark .btn-fantasma:hover, html.dark .btn-sec:hover { background-color: #24304d !important; }
+    html.dark .tabla thead th { background-color: #1a2540 !important; color: #9aa8bd !important; border-color: #26324f !important; }
+    html.dark .tabla tbody td { border-color: #1e293b !important; }
+    html.dark .nav-movil { background-color: #131c31 !important; color: #cbd5e1 !important; border-color: #26324f !important; }
+    html.dark .nav-movil.activo { background-color: #C10866 !important; color: #fff !important; border-color: #C10866 !important; }
+    html.dark .pestana { color: #9aa8bd; }
+    html.dark .pestana.activo { color: #f07bb3 !important; border-color: #f07bb3 !important; }
+    html.dark .via-white { --tw-gradient-via: #131c31 !important; --tw-gradient-stops: var(--tw-gradient-from), #131c31 var(--tw-gradient-via-position), var(--tw-gradient-to) !important; }
+    html.dark .from-oro-50 { --tw-gradient-from: rgba(238, 207, 21, .16) var(--tw-gradient-from-position) !important; }
+    html.dark .to-marca-50 { --tw-gradient-to: rgba(193, 8, 102, .18) var(--tw-gradient-to-position) !important; }
+    html.dark .scroll-fino::-webkit-scrollbar-thumb { background: #334155; }
+    html.dark .shadow-sm, html.dark .shadow-lg, html.dark .shadow-xl { --tw-shadow-color: rgba(0, 0, 0, .5); }
+    html.dark .titulo-tarjeta { color: #f1f5f9 !important; }
+    html.dark .etiqueta { color: #b4c0d3 !important; }
+    html.dark .tabla tbody td { color: #e2e8f0; }
+    /* Sobre amarillo (botones, insignias, franja de versión) el texto sigue siendo azul marino */
+    html.dark .bg-oro-400, html.dark .bg-oro-400 *, html.dark .bg-oro-300 { color: #020b3f !important; }
+    html.dark #rep-hoja, html.dark #rep-hoja * { color-scheme: light; }
     #print-encabezado { display: none; }
     @media print {
       @page { size: A4 landscape; margin: 12mm; }
@@ -93,6 +166,9 @@
       body.print-modal #modal-caja { max-height: none !important; box-shadow: none !important; border: 0 !important; max-width: none !important; }
       body.print-modal #modal-cuerpo { overflow: visible !important; }
       body.print-modal #modal-pie, body.print-modal #modal-fondo { display: none !important; }
+      html.dark body, html.dark .tarjeta, html.dark #modal-caja, html.dark .bg-white { background: #fff !important; color: #0f172a !important; }
+      html.dark * { color: #0f172a !important; border-color: #cbd5e1 !important; }
+      .rep-firma { break-inside: avoid; }
     }
   </style>
 
@@ -152,7 +228,7 @@
         </div>
         <div id="login-acceso" class="hidden text-left"></div>
       </div>
-      <p class="text-center text-xs text-white/60 mt-6">Asistencia Sumanpek, C.A. v<span id="version">3.0.0</span> · © <span id="anio"></span> Anabel Martínez RRHH · <a href="privacidad.html" class="underline hover:text-white">Privacidad</a></p>
+      <p class="text-center text-xs text-white/60 mt-6">Asistencia Sumanpek, C.A. v<span id="version">3.1.0</span> · © <span id="anio"></span> Anabel Martínez RRHH · <a href="privacidad.html" class="underline hover:text-white">Privacidad</a></p>
     </div>
   </section>
 
@@ -167,6 +243,7 @@
           </div>
           <div class="flex items-center gap-1.5">
             <button data-acc="instalar-app" class="instalar-app hidden p-2 rounded-xl bg-white/10 hover:bg-white/20" title="Instalar app"><i data-lucide="download" class="w-5 h-5"></i></button>
+            <button data-acc="tema" class="p-2 rounded-xl bg-white/10 hover:bg-white/20" title="Modo claro / oscuro"><i data-lucide="moon" class="w-5 h-5 icono-tema"></i></button>
             <button id="mc-volver" data-acc="ir-panel" class="hidden btn btn-sm bg-oro-400 text-navy-950 hover:bg-oro-300 font-bold"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Gestionar</button>
             <button data-acc="salir" class="p-2 rounded-xl bg-white/10 hover:bg-white/20" title="Cerrar sesión"><i data-lucide="log-out" class="w-5 h-5"></i></button>
           </div>
@@ -186,6 +263,7 @@
 
     <main class="max-w-md mx-auto px-5 -mt-16 pb-10 space-y-4">
       <div id="mc-cumple" class="hidden"></div>
+      <div id="mc-mes" class="hidden"></div>
       <div class="tarjeta p-6 text-center shadow-lg">
         <p id="mc-fecha" class="text-sm font-medium text-slate-500 cap1">–</p>
         <p id="mc-reloj" class="text-5xl font-extrabold tracking-tight text-slate-900 my-2 tabular-nums">--:--</p>
@@ -225,6 +303,18 @@
         <button data-acc="solicitar-marcaje" class="btn-primario btn-sm">Solicitar</button>
       </div>
 
+      <div id="mc-permisos" class="tarjeta hidden">
+        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="h-11 w-11 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center shrink-0"><i data-lucide="plane" class="w-5 h-5"></i></span>
+            <div class="min-w-0"><p class="font-semibold text-slate-800">Vacaciones y permisos</p>
+              <p id="mc-saldo" class="text-xs text-slate-500">–</p></div>
+          </div>
+          <button data-acc="solicitar-permiso" class="btn-primario btn-sm shrink-0">Solicitar</button>
+        </div>
+        <div id="mc-permisos-lista" class="divide-y divide-slate-100"></div>
+      </div>
+
       <div id="mc-solicitudes-tarjeta" class="tarjeta hidden">
         <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <h3 class="titulo-tarjeta">Mis solicitudes</h3>
@@ -241,7 +331,7 @@
         <div id="mc-historial" class="divide-y divide-slate-100"></div>
       </div>
       <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.<br>
-        Asistencia Sumanpek, C.A. v<span class="ver-app">3.0.0</span> · © Anabel Martínez RRHH</p>
+        Asistencia Sumanpek, C.A. v<span class="ver-app">3.1.0</span> · © Anabel Martínez RRHH</p>
     </main>
   </section>
 
@@ -264,13 +354,14 @@
             <p id="ad-nombre" class="text-sm font-semibold truncate">–</p>
             <p id="ad-rol" class="text-xs text-oro-300">–</p>
           </div>
+          <button data-acc="tema" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10" title="Modo claro / oscuro"><i data-lucide="moon" class="w-4 h-4 icono-tema"></i></button>
           <button data-acc="salir" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10" title="Cerrar sesión"><i data-lucide="log-out" class="w-4 h-4"></i></button>
         </div>
         <div class="mt-3 flex gap-2">
           <button data-acc="compartir-app" class="btn btn-sm flex-1 bg-white/10 text-white hover:bg-white/20"><i data-lucide="qr-code" class="w-4 h-4"></i>Compartir app</button>
           <button data-acc="instalar-app" class="instalar-app hidden btn btn-sm flex-1 bg-oro-400 text-navy-950 hover:bg-oro-300"><i data-lucide="download" class="w-4 h-4"></i>Instalar</button>
         </div>
-        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Asistencia Sumanpek, C.A. v<span class="ver-app">3.0.0</span><br>© Anabel Martínez RRHH</p>
+        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Asistencia Sumanpek, C.A. v<span class="ver-app">3.1.0</span><br>© Anabel Martínez RRHH</p>
       </div>
     </aside>
 
@@ -282,7 +373,10 @@
           <span class="font-bold text-navy-900">Sumanpek</span>
           <span id="ad-rol-movil" class="insignia bg-marca-50 text-marca-700">–</span>
         </div>
-        <button data-acc="salir" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+        <div class="flex items-center gap-1">
+          <button data-acc="tema" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100" title="Modo claro / oscuro"><i data-lucide="moon" class="w-5 h-5 icono-tema"></i></button>
+          <button data-acc="salir" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+        </div>
       </div>
       <nav id="nav-movil-items" class="px-4 pb-3 flex gap-2 overflow-x-auto scroll-fino"></nav>
     </div>
@@ -307,6 +401,14 @@
         </div>
         <div id="dash-filtros" class="no-print mb-5"></div>
         <div id="dash-kpis" class="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5"></div>
+        <div id="dash-mes" class="tarjeta mb-5">
+          <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div><h3 class="titulo-tarjeta">🏆 Empleado del mes</h3>
+              <p class="text-xs text-slate-400">Ranking: 40% puntualidad + 30% asistencia + 30% evaluación de desempeño del mes</p></div>
+            <div id="dash-mes-sel" class="w-56 no-print"></div>
+          </div>
+          <div id="dash-mes-cuerpo" class="p-5 grid lg:grid-cols-5 gap-5"></div>
+        </div>
         <div class="grid xl:grid-cols-3 gap-5 mb-5">
           <div class="tarjeta p-5 xl:col-span-2">
             <div class="flex items-center justify-between mb-3"><h3 class="titulo-tarjeta">Asistencia del período</h3><span id="dash-agrupado" class="text-xs text-slate-400"></span></div>
@@ -370,6 +472,7 @@
           <div class="flex gap-2 no-print">
             <button data-acc="exportar" data-tabla="t-empleados" data-nombre="empleados" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar</button>
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
+            <button data-acc="importar" class="btn-sec solo-rrhh"><i data-lucide="file-up" class="w-4 h-4"></i>Importar Excel</button>
             <button data-acc="nuevo-empleado" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Nuevo empleado</button>
           </div>
         </div>
@@ -402,6 +505,7 @@
             <p id="asis-subtitulo" class="text-sm text-slate-500">–</p>
           </div>
           <div class="flex gap-2 no-print">
+            <button data-acc="reporte" class="btn-sec"><i data-lucide="file-text" class="w-4 h-4"></i>Reporte mensual (PDF)</button>
             <button data-acc="exportar" data-tabla="t-asistencia" data-nombre="asistencia" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar</button>
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
             <button data-acc="marcaje-manual" class="btn-primario solo-rrhh"><i data-lucide="pencil" class="w-4 h-4"></i>Registro manual</button>
@@ -495,9 +599,20 @@
         </div>
         <div class="tarjeta"><div id="ev-tabla" class="overflow-x-auto scroll-fino"></div></div>
       </section>
+
+      <!-- ===== AJUSTES ===== -->
+      <section id="s-ajustes" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Ajustes</h2>
+            <p class="text-sm text-slate-500">Departamentos, horario, ubicación, correos y tareas automáticas</p>
+          </div>
+        </div>
+        <div id="aj-contenido"></div>
+      </section>
     </main>
   </section>
 
-  <script src="app.js?v=3.0.0"></script>
+  <script src="app.js?v=3.1.0"></script>
 </body>
 </html>
