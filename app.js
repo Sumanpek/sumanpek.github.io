@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.1.0 — Fase 3)
+ *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.2.0 — Fase 3)
  *  © 2026 Anabel Martínez RRHH — Todos los derechos de creación reservados.
  *  Solución personalizada para Sumanpek, C.A.
  * ==========================================================================
@@ -15,7 +15,7 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '3.1.0';
+const VERSION = '3.2.0';
 const APP_NOMBRE = 'Asistencia Sumanpek, C.A.';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -66,7 +66,12 @@ const SECCIONES = [
   { id: 'asistencia', titulo: 'Asistencia', icono: 'clock' },
   { id: 'permisos', titulo: 'Permisos y vacaciones', icono: 'calendar-days' },
   { id: 'evaluaciones', titulo: 'Desempeño', icono: 'award' },
+  { id: 'tareas', titulo: 'Tareas', icono: 'square-kanban' },
+  { id: 'agenda', titulo: 'Agenda', icono: 'calendar-range' },
+  { id: 'curriculums', titulo: 'Currículums', icono: 'file-user' },
+  { id: 'registro', titulo: 'Registro de actividad', icono: 'scroll-text' },
   { id: 'ajustes', titulo: 'Ajustes', icono: 'settings' },
+  { id: 'ayuda', titulo: 'Ayuda', icono: 'life-buoy' },
   { id: 'mi-marcaje', titulo: 'Mi marcaje', icono: 'fingerprint' }
 ];
 
@@ -77,6 +82,7 @@ const TIPOS_DOCUMENTO = ['Currículum', 'Cédula de identidad', 'RIF', 'Test psi
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const DIAS_SEMANA = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados', 'domingos'];
 const TIPO_OTRO = 'Otro (justifique)';
+const OPC_SEXO = [{ v: 'F', t: 'Femenino' }, { v: 'M', t: 'Masculino' }];
 
 /** Campo de cédula con selector V / E. Devuelve HTML; los valores llegan como TipoDocumento + Cedula (solo números). */
 function campoCedulaHTML(valor = '', { requerido = true } = {}) {
@@ -100,13 +106,27 @@ const OPC = {
   camisa: [vacioOpc('—'), 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
 };
 
-const CRITERIOS = [
-  { k: 'Metas', t: 'Cumplimiento de metas' },
-  { k: 'Productividad', t: 'Productividad' },
-  { k: 'Calidad', t: 'Calidad del trabajo' },
-  { k: 'TrabajoEquipo', t: 'Trabajo en equipo' },
-  { k: 'Puntualidad', t: 'Puntualidad' }
+/** Criterios de desempeño (el servidor envía la lista oficial en la sesión; esta es la copia de respaldo). */
+let CRITERIOS = [
+  { k: 'Metas', t: 'Cumplimiento de metas', g: 'Resultados' },
+  { k: 'Productividad', t: 'Productividad', g: 'Resultados' },
+  { k: 'Calidad', t: 'Calidad del trabajo', g: 'Resultados' },
+  { k: 'Puntualidad', t: 'Puntualidad y asistencia', g: 'Disciplina' },
+  { k: 'Responsabilidad', t: 'Responsabilidad y compromiso', g: 'Disciplina' },
+  { k: 'Normas', t: 'Normas y seguridad laboral', g: 'Disciplina' },
+  { k: 'TrabajoEquipo', t: 'Trabajo en equipo', g: 'Relaciones' },
+  { k: 'Comunicacion', t: 'Comunicación', g: 'Relaciones' },
+  { k: 'AtencionCliente', t: 'Atención al cliente', g: 'Relaciones' },
+  { k: 'Iniciativa', t: 'Iniciativa y proactividad', g: 'Actitud' },
+  { k: 'Adaptabilidad', t: 'Aprendizaje y adaptación', g: 'Actitud' },
+  { k: 'Orden', t: 'Orden y limpieza del área', g: 'Cuidado' },
+  { k: 'CuidadoEquipos', t: 'Cuidado de equipos y materiales', g: 'Cuidado' }
 ];
+const GRUPOS_EVAL = () => [...new Set(CRITERIOS.map(c => c.g))];
+/** Promedio de un grupo de criterios en una evaluación (ignora los "No aplica"). */
+const promGrupo = (v, g) => { const xs = CRITERIOS.filter(c => c.g === g && String(v[c.k] ?? '') !== '').map(c => num(v[c.k])); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+/** Elige la palabra según el sexo: gen('F', 'empleada', 'empleado'). */
+const gen = (sexo, fem, masc) => sexo === 'F' ? fem : masc;
 
 /* ============================ 3. UTILIDADES ============================ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -307,7 +327,8 @@ function barra(delta) {
 
 /** Acciones de solo lectura: se permiten aunque las versiones no coincidan. */
 const LECTURAS = new Set(['sesion', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
-  'descargarDocumento', 'descargarSoporte', 'estadoAcceso', 'misPermisos', 'ajustes']);
+  'descargarDocumento', 'descargarSoporte', 'estadoAcceso', 'misPermisos', 'ajustes',
+  'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria']);
 
 async function api(action, payload = {}, { silencioso = false, texto = 'Cargando…' } = {}) {
   if (S.versionDesigual && !LECTURAS.has(action)) {
@@ -551,6 +572,7 @@ async function mostrarAcceso() {
         ${campoCedulaHTML('')}
         <div><label class="etiqueta">Fecha de nacimiento *</label><input name="FechaNacimiento" type="date" class="campo" required max="${hoyStr()}"></div>
       </div>
+      <div><label class="etiqueta">Sexo *</label><select name="Sexo" class="campo" required>${opciones(OPC_SEXO, '', 'Selecciona…')}</select></div>
       <div><label class="etiqueta">Departamento *</label><select name="Departamento" class="campo" required>${deptos}</select></div>
       <div><label class="etiqueta">Teléfono (opcional)</label><input name="Telefono" type="tel" inputmode="tel" data-tel class="campo" maxlength="20" placeholder="0412-1234567" autocomplete="tel"></div>
       <button type="button" data-acc="enviar-acceso" class="btn-primario w-full !mt-5"><i data-lucide="send" class="w-4 h-4"></i>Enviar solicitud</button>
@@ -585,10 +607,12 @@ function mostrarMarcaje() {
   pintarEstadoMarcaje();
   pintarCumple();
   pintarEmpleadoMes();
+  pintarDeptoMes();
   iniciarReloj();
   cargarHistorial();
   cargarMisSolicitudes();
   cargarMisPermisos();
+  cargarMiAgenda();
   if (s.empleadoId) verificarUbicacion(true);
   iconos();
 }
@@ -602,6 +626,13 @@ function pintarAvatarPropio() {
 }
 
 const cuando = d => d === 0 ? '¡Hoy!' : d === 1 ? 'Mañana' : `En ${d} días`;
+/** "Ana", "Ana y Luis", "Ana, Luis y Rosa". */
+const listaNombres = xs => xs.length <= 1 ? xs.join('') : xs.slice(0, -1).join(', ') + ' y ' + xs[xs.length - 1];
+/** ¡Felicítala! / ¡Felicítalo! / ¡Felicítalas! / ¡Felicítalos! (si hay al menos un hombre en el grupo, va en masculino). */
+function felicitalos(personas) {
+  const todasMujeres = personas.length && personas.every(p => p.sexo === 'F');
+  return '¡Felicítal' + (todasMujeres ? 'a' : 'o') + (personas.length > 1 ? 's' : '') + '!';
+}
 
 function pintarProximos() {
   const s = S.sesion;
@@ -636,7 +667,7 @@ function pintarCumple() {
   }
   if (otros.length) {
     html += `<div class="tarjeta px-4 py-3 flex items-center gap-3 bg-oro-50 border-oro-200">
-      <span class="text-2xl">🎈</span><p class="text-sm text-slate-700">Hoy ${otros.length === 1 ? 'cumple' : 'cumplen'} años: <b>${otros.map(o => `${esc(o.nombre)} (${o.edad})`).join(', ')}</b>. ¡Felicítalos!</p></div>`;
+      <span class="text-2xl">🎈</span><p class="text-sm text-slate-700">Hoy ${otros.length === 1 ? 'cumple' : 'cumplen'} años: <b>${listaNombres(otros.map(o => `${esc(o.nombre)} (${o.edad})`))}</b>. ${felicitalos(otros)}</p></div>`;
   }
   el.innerHTML = html;
   el.className = html ? 'space-y-3' : 'hidden';
@@ -950,6 +981,7 @@ function mostrarAdmin() {
   document.body.classList.toggle('rol-direccion', s.rol === 'DIRECCION');
   document.body.classList.toggle('rol-rrhh', s.rol === 'RRHH');
   document.body.classList.toggle('dir-aprueba', s.rol === 'DIRECCION' && !!s.direccionPuedeAprobar);
+  if (Array.isArray(s.criteriosEvaluacion) && s.criteriosEvaluacion.length) CRITERIOS = s.criteriosEvaluacion;
   const rolTxt = s.rol === 'RRHH' ? 'Recursos Humanos' : 'Dirección';
   $('#ad-nombre').textContent = s.nombre;
   $('#ad-rol').textContent = rolTxt;
@@ -968,7 +1000,7 @@ function mostrarAdmin() {
 
 function pintarSelectoresDepto() {
   const deptos = opciones(S.sesion.departamentos || [], '', 'Todos los departamentos');
-  ['#emp-depto', '#per-depto', '#ev-depto', '#dash-depto', '#asis-depto'].forEach(id => {
+  ['#emp-depto', '#per-depto', '#ev-depto', '#dash-depto', '#asis-depto', '#cv-depto'].forEach(id => {
     const el = $(id); if (!el) return;
     const v = el.value; el.innerHTML = deptos;
     if (v && (S.sesion.departamentos || []).includes(v)) el.value = v;
@@ -995,7 +1027,8 @@ function navegar(sec) {
   $$('.seccion').forEach(x => x.classList.toggle('hidden', x.id !== 's-' + sec));
   $$('[data-acc="nav"]').forEach(b => b.classList.toggle('activo', b.dataset.sec === sec));
   ({ dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
-     permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: cargarAjustes })[sec]();
+     permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: cargarAjustes, tareas: cargarTareas,
+     agenda: cargarAgenda, curriculums: cargarCurriculums, registro: cargarRegistro, ayuda: cargarAyuda })[sec]();
   iconos();
 }
 
@@ -1113,7 +1146,8 @@ function refrescarFondo() {
 function redibujar() {
   if (!S.sesion || $('#v-admin').classList.contains('hidden')) return;
   const fn = { dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
-    permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: () => {} }[S.seccion];
+    permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: () => {}, tareas: pintarTareas, agenda: pintarAgenda,
+    curriculums: pintarCurriculums, registro: () => {}, ayuda: () => {} }[S.seccion];
   if (fn) fn();
 }
 
@@ -1376,7 +1410,7 @@ async function cargarDashboard(forzar = false) {
     tarjetaKPI('users', 'Personal activo', activos.length, `${ausentesHoy} de vacaciones/permiso hoy`, 'marca'),
     tarjetaKPI('user-check', 'Asistencia', fmtPct(t.pctAsistencia), `${t.asistidosLab} de ${Math.max(0, t.esperados - t.justificados)} jornadas esperadas`, 'verde'),
     tarjetaKPI('timer', 'Puntualidad', fmtPct(t.pctPuntualidad), `${t.tardes} llegada${t.tardes === 1 ? '' : 's'} tarde · ${fmtMin(t.minRetraso)}`, 'ambar'),
-    tarjetaKPI('user-x', 'Ausencias injustificadas', t.ausencias, `${t.justificados} justificadas${t.pendientes ? ` · ${t.pendientes} sin marcar aún hoy` : ''}`, 'rosa'),
+    tarjetaKPI('user-x', 'Ausencias injustificadas', t.ausencias, `${t.justificados} justificadas · del ${esc(fmtFechaCorta(f.desde))} al ${esc(fmtFechaCorta(f.hasta > hoyStr() ? hoyStr() : f.hasta))}${t.pendientes ? ` · ${t.pendientes} sin marcar aún hoy` : ''} (domingos no cuentan)`, 'rosa'),
     tarjetaKPI('hourglass', 'Horas extra (netas)', fmtHoras(t.minExtra), `${t.conExtra} empleado${t.conExtra === 1 ? '' : 's'} · ${fmtHoras(t.minRetraso)} de retraso acumulado`, 'violeta'),
     tarjetaKPI('clock', 'Horas trabajadas', fmtHoras(t.minTrabajados), `${t.asistidos ? fmtHoras(t.minTrabajados / t.asistidos) : '0 h'} promedio por jornada${t.sinSalida ? ` · ${t.sinSalida} sin salida` : ''}`, 'azul'),
     tarjetaKPI('wallet', `Nómina estimada · ${nombreMes}`, fmtDinero(nomina), `${semanasMes} ${DIAS_SEMANA[diaPago]} × ${fmtDinero(semanal)} semanales`, 'gris'),
@@ -1576,7 +1610,7 @@ function revisarAcceso(id) {
   formEmpleado(null, {
     acceso: x,
     base: { Nombres: x.Nombres, Apellidos: x.Apellidos, Cedula: x.Cedula, FechaNacimiento: x.FechaNacimiento,
-      Departamento: x.Departamento, Telefono: x.Telefono, Email: x.Email }
+      Departamento: x.Departamento, Telefono: x.Telefono, Email: x.Email, Sexo: x.Sexo }
   });
 }
 
@@ -1632,7 +1666,7 @@ function pintarEmpleados() {
   ], lista, { vacio: S.empleados.length ? 'Ningún empleado coincide con la búsqueda.' : 'Aún no hay empleados. Pulsa "Nuevo empleado" para comenzar.' });
 }
 
-function formEmpleado(id = null, { acceso = null, base = {} } = {}) {
+function formEmpleado(id = null, { acceso = null, base = {}, cv = null } = {}) {
   const e = id ? empPorId(id) : Object.assign({ Estado: 'Activo', Rol: 'EMPLEADO', TipoContrato: 'Tiempo indeterminado', FechaIngreso: hoyStr() }, base);
   if (!e) return toast('Empleado no encontrado.', 'error');
   const c = (name, label, type = 'text', extra = '') =>
@@ -1652,12 +1686,14 @@ function formEmpleado(id = null, { acceso = null, base = {} } = {}) {
           ${/(E\d+)/.test(acceso.Nota) && /sin correo\)$/.test(acceso.Nota) ? `<button type="button" data-acc="vincular-acceso" data-id="${esc(acceso.ID)}" data-emp="${esc(acceso.Nota.match(/(E\d+)/)[1])}" class="btn btn-sm mt-2 bg-white border border-navy-200 text-navy-900 hover:bg-navy-50"><i data-lucide="link" class="w-4 h-4"></i>Es la misma persona: vincular el correo a ${esc(acceso.Nota.match(/(E\d+)/)[1])}</button>`
             : '<p class="mt-1 text-xs text-amber-700">Ese expediente ya tiene su propio correo. Si es la misma persona, lo correcto es <b>rechazar</b> esta solicitud indicándole qué correo usar.</p>'}` : ''}
       </div>` : ''}
-      <form id="f-empleado" class="space-y-6" autocomplete="off" ${acceso ? `data-acceso="${esc(acceso.ID)}"` : ''}>
+      ${cv ? `<div class="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">Datos tomados del currículum de <b>${esc(cv.Nombres + ' ' + (cv.Apellidos || ''))}</b>. Completa el resto: al guardar, el currículum queda como <b>Contratado</b> y su archivo se copia al expediente.</div>` : ''}
+      <form id="f-empleado" class="space-y-6" autocomplete="off" ${acceso ? `data-acceso="${esc(acceso.ID)}"` : ''} ${cv ? `data-cv="${esc(cv.ID)}"` : ''}>
       <input type="hidden" name="ID" value="${esc(e.ID || '')}">
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos personales</legend>
         <div class="grid sm:grid-cols-2 gap-4">
           ${c('Nombres', 'Nombres *', 'text', 'required ' + ATRIB_NOMBRE)}${c('Apellidos', 'Apellidos *', 'text', 'required ' + ATRIB_NOMBRE)}
-          ${campoCedulaHTML(e.Cedula)}${c('FechaNacimiento', 'Fecha de nacimiento', 'date')}
+          ${campoCedulaHTML(e.Cedula)}
+          <div class="grid grid-cols-2 gap-3">${c('FechaNacimiento', 'Fecha de nacimiento', 'date')}${s('Sexo', 'Sexo', [{ v: '', t: 'Sin indicar' }].concat(OPC_SEXO))}</div>
           ${c('Telefono', 'Teléfono', 'tel', 'data-tel inputmode="tel" placeholder="0412-1234567"')}
           ${c('Email', 'Correo de Google (Gmail) para iniciar sesión', 'email', acceso ? 'readonly style="background:#f8fafc;color:#64748b"' : 'placeholder="nombre@gmail.com"')}
           <div class="sm:col-span-2">${c('Direccion', 'Dirección de habitación')}</div>
@@ -1717,6 +1753,14 @@ async function guardarEmpleado() {
     if (i >= 0) S.empleados[i] = r; else S.empleados.push(r);
     invalidarCache();
     toast(datos.ID ? 'Expediente actualizado.' : `Empleado creado con ID ${r.ID}.`, 'ok');
+    if (form.dataset.cv && S.cv) {
+      const c = S.cv.curriculums.find(x => x.ID === form.dataset.cv);
+      try {
+        const rc = await api('guardarCurriculum', { curriculum: Object.assign({}, c, { Estado: 'Contratado', EmpleadoID: r.ID }) }, { texto: 'Actualizando currículum…' });
+        Object.assign(c, rc);
+        if (S.seccion === 'curriculums') pintarCurriculums();
+      } catch (e2) { toast('El expediente se creó, pero no se pudo marcar el currículum: ' + e2.message, 'aviso', 8000); }
+    }
     (r._avisos || []).forEach(a => toast(a, 'aviso', 9000));
     if (datos.ID && S.modalVolver) verExpediente(r.ID, S.expTab);
     else if (!datos.ID) verExpediente(r.ID, 'documentos');
@@ -1892,8 +1936,8 @@ function expAsistenciaGrafico({ asistencia }) {
 }
 
 function expEvaluaciones({ empleado: e, evaluaciones }) {
-  const filas = evaluaciones.length ? `<div class="tarjeta overflow-x-auto"><table class="tabla"><thead><tr><th>Período</th>${CRITERIOS.map(c => `<th class="text-right">${c.t}</th>`).join('')}<th class="text-right">Promedio</th><th>Comentarios</th><th class="no-print"></th></tr></thead><tbody>
-    ${evaluaciones.map(v => `<tr><td class="font-medium">${esc(fmtPeriodo(v.Periodo))}</td>${CRITERIOS.map(c => `<td class="text-right">${esc(v[c.k])}</td>`).join('')}
+  const filas = evaluaciones.length ? `<div class="tarjeta overflow-x-auto"><table class="tabla"><thead><tr><th>Período</th>${GRUPOS_EVAL().map(g => `<th class="text-right">${g}</th>`).join('')}<th class="text-right">Promedio</th><th>Comentarios</th><th class="no-print"></th></tr></thead><tbody>
+    ${evaluaciones.map(v => `<tr><td class="font-medium"><button data-acc="ver-eval" data-id="${esc(v.ID)}" class="hover:text-marca-700 text-left cap1">${esc(fmtPeriodo(v.Periodo))}</button></td>${GRUPOS_EVAL().map(g => { const x = promGrupo(v, g); return `<td class="text-right ${colorPuntaje(x)}">${x === null ? '—' : fmtNum(x)}</td>`; }).join('')}
       <td class="text-right font-extrabold ${colorPuntaje(num(v.Promedio))}">${esc(v.Promedio)}</td><td class="envolver text-xs text-slate-500">${esc(v.Comentarios)}</td>
       <td class="no-print solo-rrhh"><button data-acc="borrar-eval" data-id="${esc(v.ID)}" class="btn-fantasma btn-sm text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('')}
     </tbody></table></div>` : '<p class="text-center text-sm text-slate-400 py-8">Sin evaluaciones registradas.</p>';
@@ -2292,15 +2336,16 @@ function pintarEvaluaciones() {
   });
   grafico('ch-eval-criterios', {
     type: 'radar',
-    data: { labels: CRITERIOS.map(c => c.t), datasets: [{ label: 'Promedio', data: CRITERIOS.map(c => +prom(lista.map(v => num(v[c.k]))).toFixed(1)), borderColor: PALETA.magenta, backgroundColor: conAlfa(PALETA.magenta, 0.16), borderWidth: 2, pointBackgroundColor: CRITERIOS.map((_, i) => colorSerie(i + 1)), pointBorderColor: '#fff', pointRadius: 6 }] },
+    data: { labels: CRITERIOS.map(c => c.t), datasets: [{ label: 'Promedio', data: CRITERIOS.map(c => { const xs = lista.filter(v => String(v[c.k] ?? '') !== '').map(v => num(v[c.k])); return xs.length ? +prom(xs).toFixed(1) : null; }), borderColor: PALETA.magenta, backgroundColor: conAlfa(PALETA.magenta, 0.16), borderWidth: 2, pointBackgroundColor: CRITERIOS.map((_, i) => colorSerie(i + 1)), pointBorderColor: '#fff', pointRadius: 6 }] },
     options: baseOpciones({ plugins: { legend: { display: false } }, scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false }, pointLabels: { font: { size: 10 } } } } })
   });
 
   renderTabla('ev-tabla', 't-evaluaciones', [
-    { t: 'Empleado', v: v => `<button data-acc="ver-expediente" data-id="${esc(v.EmpleadoID)}" data-tab="evaluaciones" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(v._e))}</button><div class="text-xs text-slate-400">${esc(v._e.Departamento || '')}</div>`, s: v => nombreCompleto(v._e), c: v => nombreCompleto(v._e) },
+    { t: 'Empleado', v: v => `<button data-acc="ver-eval" data-id="${esc(v.ID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(v._e))}</button><div class="text-xs text-slate-400">${esc(v._e.Departamento || '')}</div>`, s: v => nombreCompleto(v._e), c: v => nombreCompleto(v._e) },
     { t: 'Departamento', v: v => esc(v._e.Departamento), c: v => v._e.Departamento, cls: 'hidden' },
     { t: 'Período', v: v => `<span class="cap1">${esc(fmtPeriodo(v.Periodo))}</span>`, s: v => v.Periodo, c: v => v.Periodo },
-    ...CRITERIOS.map(c => ({ t: c.t, v: v => esc(v[c.k]), s: v => num(v[c.k]), c: v => v[c.k], cls: 'text-right' })),
+    ...GRUPOS_EVAL().map(g => ({ t: g, v: v => { const x = promGrupo(v, g); return `<span class="${colorPuntaje(x)}">${x === null ? '—' : fmtNum(x)}</span>`; }, s: v => promGrupo(v, g) ?? -1, cls: 'text-right' })),
+    ...CRITERIOS.map(c => ({ t: c.t, v: v => esc(v[c.k]), c: v => v[c.k] ?? '', cls: 'hidden' })),
     { t: 'Promedio', v: v => `<b class="text-base ${colorPuntaje(num(v.Promedio))}">${esc(v.Promedio)}</b>`, s: v => num(v.Promedio), c: v => String(v.Promedio).replace('.', ','), cls: 'text-right' },
     { t: 'Comentarios', v: v => `<span class="text-xs text-slate-500">${esc(v.Comentarios)}</span>`, c: v => v.Comentarios, cls: 'envolver' },
     { t: 'Evaluador', v: v => `<span class="text-xs text-slate-400">${esc(v.Evaluador)}</span>`, c: v => v.Evaluador, cls: 'hidden' },
@@ -2321,25 +2366,34 @@ async function formEvaluacion(emp = null) {
         <div><label class="etiqueta">Empleado *</label><select name="EmpleadoID" class="campo" required>${opciones(activos.map(e => ({ v: e.ID, t: `${nombreCompleto(e)} · ${e.Departamento}` })), emp || '', 'Selecciona…')}</select></div>
         <div><label class="etiqueta">Período evaluado *</label>${selectorMesHTML('ev-form-periodo', mesAnt, { name: 'Periodo' })}</div>
       </div>
-      <div class="tarjeta p-4 space-y-4">
-        ${CRITERIOS.map(c => `<div>
-          <div class="flex justify-between items-center mb-1"><label class="etiqueta mb-0">${c.t}</label>
+      <p class="text-xs text-slate-500">Califica cada criterio de 0 a 100. Si alguno no corresponde a su cargo (por ejemplo, atención al cliente), marca <b>No aplica</b> y no contará en el promedio.</p>
+      ${GRUPOS_EVAL().map(g => `<div class="tarjeta p-4 space-y-4"><p class="text-xs font-bold uppercase tracking-wide text-marca-700">${g}</p>
+        ${CRITERIOS.filter(c => c.g === g).map(c => `<div data-fila="${c.k}">
+          <div class="flex justify-between items-center gap-2 mb-1"><label class="etiqueta mb-0">${c.t}</label>
             <div class="flex items-center gap-2">${c.k === 'Puntualidad' ? '<button type="button" data-acc="calc-puntualidad" class="text-xs font-semibold text-marca-700 hover:underline">Calcular desde asistencia</button>' : ''}
+            <label class="flex items-center gap-1 text-[11px] text-slate-500 whitespace-nowrap"><input type="checkbox" data-na="${c.k}" class="h-3.5 w-3.5"> No aplica</label>
             <input name="${c.k}" type="number" min="0" max="100" required class="campo w-20 py-1.5 text-right font-bold" value="80" data-criterio></div></div>
-          <input type="range" min="0" max="100" value="80" class="w-full accent-teal-700" data-rango="${c.k}"></div>`).join('')}
-        <div class="flex justify-between items-center pt-3 border-t border-slate-100"><span class="text-sm font-semibold">Promedio</span><span id="ev-prom" class="text-2xl font-extrabold text-marca-700">80</span></div>
-      </div>
+          <input type="range" min="0" max="100" value="80" class="w-full accent-[#C10866]" data-rango="${c.k}"></div>`).join('')}</div>`).join('')}
+      <div class="tarjeta p-4 flex justify-between items-center"><span class="text-sm font-semibold">Promedio <span id="ev-n" class="text-xs text-slate-400"></span></span><span id="ev-prom" class="text-2xl font-extrabold text-marca-700">80</span></div>
       <div><label class="etiqueta">Comentarios y plan de mejora</label><textarea name="Comentarios" rows="3" class="campo" placeholder="Fortalezas, oportunidades de mejora, compromisos…"></textarea></div>
     </form>`,
     pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-eval" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar evaluación</button>`
   });
   const form = $('#f-eval');
   const promedio = () => {
-    const vals = CRITERIOS.map(c => num(form[c.k].value));
-    const p = vals.reduce((s, x) => s + x, 0) / vals.length;
+    const vals = CRITERIOS.filter(c => !form[c.k].disabled).map(c => num(form[c.k].value));
+    const p = vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : 0;
     $('#ev-prom').textContent = fmtNum(p);
     $('#ev-prom').className = `text-2xl font-extrabold ${colorPuntaje(p)}`;
+    $('#ev-n').textContent = `(${vals.length} de ${CRITERIOS.length} criterios)`;
   };
+  $$('[data-na]', form).forEach(ch => ch.addEventListener('change', () => {
+    const k = ch.dataset.na, inp = form[k], rg = $(`[data-rango="${k}"]`, form);
+    inp.disabled = rg.disabled = ch.checked; inp.required = !ch.checked;
+    $(`[data-fila="${k}"]`, form).classList.toggle('opacity-40', ch.checked);
+    promedio();
+  }));
+  promedio();
   $$('[data-rango]', form).forEach(r => r.addEventListener('input', () => { form[r.dataset.rango].value = r.value; promedio(); }));
   $$('[data-criterio]', form).forEach(i => i.addEventListener('input', () => { const r = $(`[data-rango="${i.name}"]`, form); r.value = i.value; promedio(); }));
 }
@@ -2367,6 +2421,8 @@ async function guardarEvaluacion() {
   const form = $('#f-eval');
   if (!form.reportValidity()) return;
   const datos = datosFormulario(form);
+  CRITERIOS.forEach(c => { if (form[c.k].disabled) datos[c.k] = ''; });
+  if (CRITERIOS.filter(c => datos[c.k] !== '').length < 3) return toast('Califica al menos 3 criterios.', 'aviso');
   if (!datos.Periodo) return toast('Selecciona el período evaluado.', 'aviso');
   try {
     await api('guardarEvaluacion', { evaluacion: datos }, { texto: 'Guardando evaluación…' });
@@ -2566,7 +2622,7 @@ function pintarEmpleadoMes() {
   el.className = 'tarjeta p-4 flex items-center gap-4 border-oro-300 bg-gradient-to-br from-oro-50 via-white to-marca-50';
   el.innerHTML = `<div class="relative shrink-0">${avatarHTML(m.foto, m.nombre, 'h-16 w-16 text-lg ring-4 ring-oro-400')}<span class="absolute -bottom-1 -right-2 text-2xl">🏆</span></div>
     <div class="min-w-0">
-      <p class="text-[11px] font-bold uppercase tracking-wide text-oro-700">Empleado del mes · ${esc(fmtPeriodo(m.periodo))}</p>
+      <p class="text-[11px] font-bold uppercase tracking-wide text-oro-700">${gen(m.sexo, 'Empleada', 'Empleado')} del mes · ${esc(fmtPeriodo(m.periodo))}</p>
       <p class="font-extrabold text-navy-900 truncate">${yo ? `¡Eres tú, ${esc(m.nombre.split(' ')[0])}! 🎉` : esc(m.nombre)}</p>
       <p class="text-xs text-slate-500 truncate">${esc([m.cargo, m.departamento].filter(Boolean).join(' · '))}</p>
       ${m.motivo ? `<p class="text-xs text-slate-600 mt-1 italic">“${esc(m.motivo)}”</p>` : ''}
@@ -2675,13 +2731,13 @@ async function pintarEmpleadoMesDash() {
     const p = r.pctPuntualidad ?? 0, a = r.pctAsistencia ?? 100;
     return Object.assign({ puntaje: r.evalProm !== null ? p * 0.4 + a * 0.3 + r.evalProm * 0.3 : p * 0.55 + a * 0.45 }, r);
   }).sort((a, b) => b.puntaje - a.puntaje || a.minRetraso - b.minRetraso || b.minTrabajados - a.minTrabajados).slice(0, 5);
-  const rec = (S.reconocimientos || []).find(x => x.Periodo === per);
+  const rec = (S.reconocimientos || []).find(x => x.Periodo === per && x.Tipo !== 'DEPARTAMENTO');
   const g = rec ? empPorId(rec.EmpleadoID) : null;
   const izq = g ? `<div class="h-full rounded-2xl p-5 text-center bg-gradient-to-br from-oro-50 via-white to-marca-50 border border-oro-300">
       <div class="relative inline-block">${avatarHTML(g.FotoMini, nombreCompleto(g), 'h-24 w-24 text-2xl ring-4 ring-oro-400 mx-auto')}<span class="absolute -bottom-1 -right-2 text-3xl">🏆</span></div>
       <p class="mt-3 text-lg font-extrabold text-navy-900">${esc(nombreCompleto(g))}</p>
       <p class="text-xs text-slate-500">${esc([g.Cargo, g.Departamento].filter(Boolean).join(' · '))}</p>
-      <p class="mt-1 text-xs font-bold uppercase tracking-wide text-oro-700">Empleado del mes · ${esc(fmtPeriodo(per))}</p>
+      <p class="mt-1 text-xs font-bold uppercase tracking-wide text-oro-700">${gen(sexoDe(g), 'Empleada', 'Empleado')} del mes · ${esc(fmtPeriodo(per))}</p>
       ${rec.Motivo ? `<p class="mt-2 text-sm italic text-slate-600">“${esc(rec.Motivo)}”</p>` : ''}
       ${rec.Puntaje ? `<p class="mt-1 text-xs text-slate-400">Puntaje: ${esc(rec.Puntaje)}</p>` : ''}
       <button data-acc="quitar-reconocimiento" data-id="${esc(rec.ID)}" class="btn-fantasma btn-sm mt-3 solo-rrhh no-print"><i data-lucide="x" class="w-4 h-4"></i>Quitar</button>
@@ -2703,6 +2759,7 @@ async function pintarEmpleadoMesDash() {
       </div>`).join('')}</div>`
     : '<p class="text-sm text-slate-400 text-center py-8">No hay marcajes en ese mes para calcular el ranking.</p>';
   cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}</div>`;
+  pintarDeptoMesDash(per, k.filas);
   iconos();
 }
 
@@ -2714,8 +2771,8 @@ async function reconocerEmpleado(id, puntaje) {
   if (!motivo) return;
   try {
     const r = await api('reconocer', { periodo: per, empleadoId: id, motivo, puntaje }, { texto: 'Guardando…' });
-    S.reconocimientos = (S.reconocimientos || []).filter(x => x.Periodo !== per).concat([r]);
-    toast(`¡${nombreCompleto(e)} es el empleado del mes!`, 'ok', 6000);
+    S.reconocimientos = (S.reconocimientos || []).filter(x => !(x.Periodo === per && x.Tipo !== 'DEPARTAMENTO')).concat([r]);
+    toast(`¡${nombreCompleto(e)} es ${gen(sexoDe(e), 'la empleada', 'el empleado')} del mes!`, 'ok', 6000);
     lanzarConfeti(2500);
     pintarEmpleadoMesDash();
   } catch (err) { toast(err.message, 'error'); }
@@ -3002,7 +3059,7 @@ function pintarAjustes() {
     <input type="checkbox" name="${k}" class="mt-0.5 h-5 w-5 shrink-0 accent-[#C10866]" ${String(c[k]).toUpperCase() !== 'NO' ? 'checked' : ''} ${dis}>
     <span><span class="block text-sm font-semibold text-slate-800">${etq}</span><span class="block text-xs text-slate-500">${ayuda}</span></span></label>`;
   const dias = String(c.DIAS_LABORABLES).split(',').map(Number);
-  const chips = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d, i) => `<label class="cursor-pointer"><input type="checkbox" name="dia" value="${i + 1}" class="peer sr-only" ${dias.includes(i + 1) ? 'checked' : ''} ${dis}>
+  const chips = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d, i) => `<label class="cursor-pointer"><input type="checkbox" name="dia" value="${i + 1}" class="peer sr-only" ${dias.includes(i + 1) ? 'checked' : ''} ${dis}>
     <span class="block rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 peer-checked:bg-navy-900 peer-checked:text-white peer-checked:border-navy-900">${d}</span></label>`).join('');
   const deptos = departamentos.slice().sort((a, b) => (b.Activo - a.Activo) || a.Nombre.localeCompare(b.Nombre, 'es'));
   const filaDepto = d => `<div class="flex items-center gap-2 px-5 py-3">
@@ -3036,7 +3093,7 @@ function pintarAjustes() {
           ${campo('TOLERANCIA_MIN', 'Tolerancia (minutos)', 'number', 'min="0" max="120" required', 'Minutos de gracia antes de contar retraso.')}
           ${campo('UMBRAL_EXTRA_MIN', 'Mínimo para horas extra (min)', 'number', 'min="0" max="240" required', 'Minutos después de la salida a partir de los cuales cuentan.')}
           ${campo('DIAS_MAX_MARCAJE_MANUAL', 'Días para pedir marcaje manual', 'number', 'min="1" max="60" required', 'Hacia atrás, desde el celular del empleado.')}
-          <div class="sm:col-span-3"><label class="etiqueta">Días laborables</label><div class="flex flex-wrap gap-2">${chips}</div></div>
+          <div class="sm:col-span-3"><label class="etiqueta">Días laborables</label><div class="flex flex-wrap items-center gap-2">${chips}<span class="rounded-lg border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-400" title="El domingo nunca cuenta como día de asistencia">Dom · no laborable</span></div></div>
           <div class="sm:col-span-3">${interruptor('COMPENSAR_RETRASO', 'Descontar el retraso de las horas extra del mismo día', 'Ejemplo: llegó 20 min tarde y se quedó 60 min más → cuenta 40 min de extra.')}</div>
           ${campo('MONEDA', 'Moneda', 'text', 'maxlength="10" required')}
           <div><label class="etiqueta">Día de pago semanal</label><select name="DIA_PAGO" class="campo" ${dis}>${opciones([1, 2, 3, 4, 5, 6, 7].map(n => ({ v: n, t: nombreDia(n) })), c.DIA_PAGO)}</select></div>
@@ -3063,7 +3120,7 @@ function pintarAjustes() {
           ${interruptor('CIERRE_AVISAR_EMPLEADOS', 'Recordar a quien no marcó salida', 'En el cierre diario, cada uno recibe un correo para pedir su marcaje.')}
           ${interruptor('DIRECCION_PUEDE_APROBAR', 'Dirección también puede aprobar', 'Podrá aprobar o rechazar marcajes manuales y permisos (además de RRHH).')}
           <div class="grid grid-cols-2 gap-3">${campo('HORA_CIERRE', 'Hora del cierre diario', 'number', 'min="0" max="23" required', '0 a 23 (20 = 8 p. m.)')}${campo('RESPALDOS_A_CONSERVAR', 'Respaldos a guardar', 'number', 'min="1" max="52" required', 'Se hace uno cada domingo.')}</div>
-          <div class="sm:col-span-2">${campo('DIRECCION_EMAILS', 'Correos de Dirección (separados por coma)', 'text', 'placeholder="dueno@gmail.com"', 'Ven todo sin editar y reciben el resumen del cierre diario.')}</div>
+          <div class="sm:col-span-2">${campo('DIRECCION_EMAILS', 'Correos de Dirección (separados por coma)', 'text', 'placeholder="ejemplo@sumanpek.com"', 'Ven todo sin editar y reciben el resumen del cierre diario.')}</div>
         </div>
         <div class="mt-4 rounded-xl ${auto ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'} px-4 py-3 text-sm">
           ${auto ? `✅ Tareas automáticas activas: cierre diario a las <b>${esc(c.HORA_CIERRE)}:00</b> y respaldo cada domingo a las 3:00 a. m.`
@@ -3217,6 +3274,784 @@ async function ajRecalcular() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+/* ======================= 17j. v3.2 · SEXO, DEPARTAMENTO DEL MES, DETALLE DE EVALUACIÓN ======================= */
+/** 'F' o 'M'. Si el expediente no lo indica, se deduce del primer nombre (igual que en el servidor). */
+function sexoDe(e) {
+  const s = String(e?.Sexo || '').toUpperCase();
+  if (s === 'F' || s === 'M') return s;
+  const n = normalizar(String(e?.Nombres || '').split(' ')[0]);
+  if (!n) return '';
+  const fem = ['isabel', 'raquel', 'carmen', 'mercedes', 'beatriz', 'luz', 'ines', 'pilar', 'rosario', 'consuelo', 'dolores', 'maribel', 'marisol',
+    'yamilet', 'lisbeth', 'lizbeth', 'nathaly', 'nataly', 'mary', 'ruth', 'esther', 'abigail', 'yanet', 'janet', 'jenny', 'yenny', 'karen', 'evelyn',
+    'ingrid', 'liz', 'nancy', 'gladys', 'doris', 'belkis', 'yuli', 'leidy', 'sol', 'noemi', 'milagros', 'dulce', 'flor', 'miriam', 'elizabeth',
+    'lourdes', 'socorro', 'nieves', 'jazmin', 'rubi', 'yasmin', 'marian', 'carol', 'yusmary', 'yuleisy', 'deisy', 'daisy', 'nelly', 'ely', 'arelis',
+    'maryuri', 'yorgelis', 'mileidy', 'yeliz', 'nairobi', 'ivonne', 'yvonne', 'lilibeth', 'maribeth', 'astrid', 'judith', 'edith', 'raiza', 'isis',
+    'sarai', 'jasmin', 'alison', 'allison', 'genesis', 'nicole', 'michelle', 'katherine', 'kathy'];
+  const masc = ['joshua', 'luca', 'nikita', 'borja', 'elias', 'jesus', 'matias', 'tobias', 'josue', 'garcia'];
+  if (fem.includes(n)) return 'F';
+  if (masc.includes(n)) return 'M';
+  return /a$/.test(n) ? 'F' : 'M';
+}
+
+function pintarDeptoMes() {
+  const d = S.sesion?.departamentoDelMes, el = $('#mc-dmes');
+  if (!d) { el.className = 'hidden'; el.innerHTML = ''; return; }
+  const mio = d.departamento === S.sesion.departamento;
+  el.className = 'tarjeta p-4 flex items-center gap-4 border-navy-200 bg-gradient-to-br from-navy-50 via-white to-oro-50';
+  el.innerHTML = `<span class="h-14 w-14 shrink-0 rounded-2xl bg-navy-900 text-3xl flex items-center justify-center">🏅</span>
+    <div class="min-w-0">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-navy-700">Departamento del mes · ${esc(fmtPeriodo(d.periodo))}</p>
+      <p class="font-extrabold text-navy-900 truncate">${mio ? `¡Tu equipo: ${esc(d.departamento)}! 🎉` : esc(d.departamento)}</p>
+      ${d.motivo ? `<p class="text-xs text-slate-600 mt-1 italic">“${esc(d.motivo)}”</p>` : ''}
+    </div>`;
+}
+
+function pintarDeptoMesDash(per, filas) {
+  const cont = $('#dash-dmes-cuerpo');
+  if (!cont) return;
+  const g = {};
+  const prom = xs => xs.reduce((s, x) => s + x, 0) / xs.length;
+  filas.filter(r => r.asistidos > 0 && r.esperados > 0).forEach(r => {
+    const p = r.pctPuntualidad ?? 0, a = r.pctAsistencia ?? 100;
+    const d = r.e.Departamento || 'Sin departamento';
+    (g[d] = g[d] || { d, pts: [], punt: [], asis: [], ev: [] });
+    g[d].pts.push(r.evalProm !== null ? p * 0.4 + a * 0.3 + r.evalProm * 0.3 : p * 0.55 + a * 0.45);
+    g[d].punt.push(p); g[d].asis.push(a);
+    if (r.evalProm !== null) g[d].ev.push(r.evalProm);
+  });
+  const rank = Object.values(g).map(x => ({ d: x.d, n: x.pts.length, puntaje: prom(x.pts), punt: prom(x.punt), asis: prom(x.asis), ev: x.ev.length ? prom(x.ev) : null }))
+    .sort((a, b) => b.puntaje - a.puntaje || b.n - a.n);
+  const rec = (S.reconocimientos || []).find(x => x.Periodo === per && x.Tipo === 'DEPARTAMENTO');
+  const izq = rec ? `<div class="h-full rounded-2xl p-5 text-center bg-gradient-to-br from-navy-50 via-white to-oro-50 border border-navy-200">
+      <span class="mx-auto h-20 w-20 rounded-3xl bg-navy-900 text-5xl flex items-center justify-center">🏅</span>
+      <p class="mt-3 text-lg font-extrabold text-navy-900">${esc(rec.Departamento)}</p>
+      <p class="mt-1 text-xs font-bold uppercase tracking-wide text-navy-700">Departamento del mes · ${esc(fmtPeriodo(per))}</p>
+      ${rec.Motivo ? `<p class="mt-2 text-sm italic text-slate-600">“${esc(rec.Motivo)}”</p>` : ''}
+      ${rec.Puntaje ? `<p class="mt-1 text-xs text-slate-400">Puntaje: ${esc(rec.Puntaje)}</p>` : ''}
+      <button data-acc="quitar-reconocimiento" data-id="${esc(rec.ID)}" class="btn-fantasma btn-sm mt-3 solo-rrhh no-print"><i data-lucide="x" class="w-4 h-4"></i>Quitar</button></div>`
+    : `<div class="h-full rounded-2xl border-2 border-dashed border-slate-200 p-6 flex flex-col items-center justify-center text-center">
+      <span class="text-4xl">🏅</span><p class="mt-2 font-semibold text-slate-700">Sin departamento del mes para ${esc(fmtPeriodo(per))}</p>
+      <p class="text-xs text-slate-500 mt-1">${esRRHH() ? 'Elige del ranking y pulsa <b>Reconocer</b>. Todo su equipo recibirá un correo de felicitación.' : 'Recursos Humanos aún no lo ha elegido.'}</p></div>`;
+  const der = rank.length ? `<div class="space-y-2">${rank.slice(0, 6).map((r, i) => `
+      <div class="flex items-center gap-3 rounded-xl p-2.5 ${rec && rec.Departamento === r.d ? 'bg-navy-50' : 'hover:bg-slate-50'}">
+        <span class="w-6 text-center font-extrabold ${i === 0 ? 'text-oro-600' : 'text-slate-400'}">${['🥇', '🥈', '🥉'][i] || i + 1}</span>
+        <div class="flex-1 min-w-0"><p class="font-semibold text-slate-800 truncate">${esc(r.d)}</p>
+          <p class="text-xs text-slate-500 truncate">${r.n} persona${r.n === 1 ? '' : 's'} · puntualidad ${fmtPct(r.punt)} · asistencia ${fmtPct(r.asis)}${r.ev !== null ? ` · desempeño ${fmtNum(r.ev)}` : ''}</p></div>
+        <span class="text-lg font-extrabold tabular-nums ${colorPuntaje(r.puntaje)}">${fmtNum(r.puntaje)}</span>
+        <button data-acc="reconocer-depto" data-depto="${esc(r.d)}" data-puntaje="${r.puntaje.toFixed(1)}" class="btn btn-sm bg-navy-900 text-white hover:bg-navy-950 solo-rrhh no-print">Reconocer</button>
+      </div>`).join('')}</div>` : '<p class="text-sm text-slate-400 text-center py-8">No hay marcajes en ese mes para calcular el ranking.</p>';
+  cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}</div>`;
+}
+
+async function reconocerDepto(depto, puntaje) {
+  const per = $('#dash-mes-periodo').value;
+  const motivo = await dialogo({ titulo: `Departamento del mes · ${fmtPeriodo(per)}`,
+    mensaje: `${depto} aparecerá en la app de todo el personal y cada miembro del equipo recibirá un correo de felicitación. Escribe el motivo:`,
+    boton: 'Reconocer 🏅', conTexto: true, valor: 'Por su trabajo en equipo, su puntualidad y su excelente desempeño.' });
+  if (!motivo) return;
+  try {
+    const r = await api('reconocer', { tipo: 'DEPARTAMENTO', periodo: per, departamento: depto, motivo, puntaje }, { texto: 'Guardando…' });
+    S.reconocimientos = (S.reconocimientos || []).filter(x => !(x.Periodo === per && x.Tipo === 'DEPARTAMENTO')).concat([r]);
+    toast(`¡${depto} es el departamento del mes!`, 'ok', 6000);
+    lanzarConfeti(2500);
+    pintarEmpleadoMesDash();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function verEvaluacion(id) {
+  const v = (S.evaluaciones || []).find(x => x.ID === id) || (S.exp?.evaluaciones || []).find(x => x.ID === id);
+  if (!v) return toast('Evaluación no encontrada.', 'error');
+  const e = empPorId(v.EmpleadoID) || S.exp?.empleado || {};
+  const empExp = S.exp?.empleado.ID;
+  const barra = (t, x) => `<div class="flex items-center gap-3 py-1.5"><span class="w-52 shrink-0 text-sm text-slate-600">${esc(t)}</span>
+    ${x === null ? '<span class="text-xs text-slate-400">No aplica</span>' : `<div class="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${x}%;background:${x >= 85 ? '#10b981' : x >= 70 ? '#031263' : x >= 55 ? '#f59e0b' : '#e11d48'}"></div></div>
+    <span class="w-10 text-right font-bold tabular-nums ${colorPuntaje(x)}">${fmtNum(x)}</span>`}</div>`;
+  abrirModal({
+    titulo: `Evaluación · ${nombreCompleto(e)}`,
+    ancho: 'sm:max-w-2xl',
+    volver: empExp ? (() => verExpediente(empExp, 'evaluaciones')) : null,
+    cuerpo: `<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div><p class="text-sm text-slate-500 cap1">${esc(fmtPeriodo(v.Periodo))} · ${esc(e.Departamento || '')}</p><p class="text-xs text-slate-400">Evaluó: ${esc(v.Evaluador || '—')}</p></div>
+        <div class="text-right"><p class="text-xs text-slate-500">Promedio</p><p class="text-3xl font-extrabold ${colorPuntaje(num(v.Promedio))}">${esc(v.Promedio)}</p></div></div>
+      ${GRUPOS_EVAL().map(g => `<div class="mb-4"><p class="text-xs font-bold uppercase tracking-wide text-marca-700 mb-1">${g}</p>
+        ${CRITERIOS.filter(c => c.g === g).map(c => barra(c.t, String(v[c.k] ?? '') === '' ? null : num(v[c.k]))).join('')}</div>`).join('')}
+      ${v.Comentarios ? `<div class="rounded-xl bg-slate-50 p-4 text-sm text-slate-700"><p class="text-xs font-bold text-slate-500 mb-1">Comentarios y plan de mejora</p>${esc(v.Comentarios)}</div>` : ''}`,
+    pie: `<button data-acc="imprimir-modal" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button><button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
+  });
+}
+
+/* ======================= 17k. TAREAS (KANBAN) ======================= */
+const COLS_TAREA = [
+  { e: 'Pendiente', c: '#94a3b8', i: 'circle-dashed' }, { e: 'En progreso', c: '#0ea5e9', i: 'loader' },
+  { e: 'En revisión', c: '#f59e0b', i: 'eye' }, { e: 'Hecho', c: '#10b981', i: 'circle-check' }
+];
+const ESTILO_PRIO = { Urgente: 'bg-rose-100 text-rose-700', Alta: 'bg-amber-100 text-amber-700', Media: 'bg-sky-100 text-sky-700', Baja: 'bg-slate-100 text-slate-600' };
+
+async function cargarPlan(forzar = false) {
+  if (S.plan && !forzar && Date.now() - S.plan.t < 60000) return S.plan;
+  const d = await api('planificacion', {}, { silencioso: !!S.plan, texto: 'Cargando tablero…' });
+  S.plan = Object.assign(d, { t: Date.now() });
+  return S.plan;
+}
+
+async function cargarTareas() {
+  try { await asegurarCatalogo(); await cargarPlan(); } catch (e) { return toast(e.message, 'error'); }
+  const sel = $('#ta-resp'), v = sel.value;
+  sel.innerHTML = `<option value="">Todos los responsables</option><option value="__sin">Sin asignar</option>` +
+    opciones(S.empleados.filter(e => e.Estado !== 'Inactivo').sort(ordenarNombre).map(e => ({ v: e.ID, t: nombreCompleto(e) })));
+  sel.value = v;
+  pintarTareas();
+}
+
+function estadoVencimiento(t) {
+  if (!t.FechaLimite || t.Estado === 'Hecho') return '';
+  const hoy = hoyStr();
+  if (t.FechaLimite < hoy) return 'vencida';
+  if (t.FechaLimite <= sumarDias(hoy, 2)) return 'pronto';
+  return '';
+}
+
+function chipFecha(t) {
+  if (!t.FechaLimite) return '';
+  const v = estadoVencimiento(t);
+  const cls = v === 'vencida' ? 'bg-rose-100 text-rose-700' : v === 'pronto' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600';
+  return `<span class="insignia ${cls}" title="Fecha límite"><i data-lucide="calendar" class="w-3 h-3"></i>${esc(aFecha(t.FechaLimite).toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }))}${v === 'vencida' ? ' · vencida' : ''}</span>`;
+}
+
+function filtrarTareas() {
+  const q = normalizar($('#ta-buscar').value.trim()), resp = $('#ta-resp').value, prio = $('#ta-prio').value, venc = $('#ta-vencidas').checked;
+  const finSemana = sumarDias(hoyStr(), 7 - diaSemana(hoyStr()));
+  return (S.plan?.tareas || []).filter(t => {
+    if (resp === '__sin' ? t.ResponsableID : resp && t.ResponsableID !== resp) return false;
+    if (prio && t.Prioridad !== prio) return false;
+    if (venc && !(t.FechaLimite && t.FechaLimite <= finSemana && t.Estado !== 'Hecho')) return false;
+    if (q && !normalizar([t.Titulo, t.Descripcion, t.Etiquetas, nombreCompleto(empPorId(t.ResponsableID)), t.Departamento].join(' ')).includes(q)) return false;
+    return true;
+  });
+}
+
+function tarjetaTarea(t) {
+  const e = empPorId(t.ResponsableID), rr = esRRHH();
+  const i = COLS_TAREA.findIndex(c => c.e === t.Estado);
+  return `<div class="kb-tarjeta tarjeta p-3 ${t.Estado === 'Hecho' ? 'opacity-75' : ''}" draggable="${rr}" data-id="${esc(t.ID)}" data-acc="ver-tarea">
+    <div class="flex items-start justify-between gap-2">
+      <p class="font-semibold text-sm text-slate-800 leading-snug ${t.Estado === 'Hecho' ? 'line-through' : ''}">${esc(t.Titulo)}</p>
+      <span class="insignia shrink-0 ${ESTILO_PRIO[t.Prioridad] || ''}">${esc(t.Prioridad)}</span>
+    </div>
+    ${t.Descripcion ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2">${esc(t.Descripcion)}</p>` : ''}
+    ${t.Etiquetas ? `<div class="flex flex-wrap gap-1 mt-2">${t.Etiquetas.split(',').map(x => `<span class="rounded-md bg-navy-50 text-navy-700 px-1.5 py-0.5 text-[10px] font-semibold">#${esc(x.trim())}</span>`).join('')}</div>` : ''}
+    <div class="flex items-center justify-between gap-2 mt-3">
+      <div class="flex items-center gap-1.5 min-w-0">${e ? `${avatarHTML(e.FotoMini, nombreCompleto(e), 'h-6 w-6 text-[9px]')}<span class="text-xs text-slate-600 truncate">${esc(String(e.Nombres).split(' ')[0])}</span>` : '<span class="text-xs text-slate-400">Sin asignar</span>'}</div>
+      <div class="flex items-center gap-1">${chipFecha(t)}</div>
+    </div>
+    ${rr ? `<div class="flex justify-between mt-2 md:hidden">
+      <button data-acc="tarea-mover" data-id="${esc(t.ID)}" data-dir="-1" class="btn-fantasma btn-sm ${i === 0 ? 'invisible' : ''}"><i data-lucide="arrow-left" class="w-4 h-4"></i>${i > 0 ? esc(COLS_TAREA[i - 1].e) : ''}</button>
+      <button data-acc="tarea-mover" data-id="${esc(t.ID)}" data-dir="1" class="btn-fantasma btn-sm ${i === COLS_TAREA.length - 1 ? 'invisible' : ''}">${i < COLS_TAREA.length - 1 ? esc(COLS_TAREA[i + 1].e) : ''}<i data-lucide="arrow-right" class="w-4 h-4"></i></button></div>` : ''}
+  </div>`;
+}
+
+function pintarTareas() {
+  if (!S.plan) return;
+  const lista = filtrarTareas();
+  $('#ta-tablero').innerHTML = COLS_TAREA.map(c => {
+    const ts = lista.filter(t => t.Estado === c.e).sort((a, b) => num(a.Orden) - num(b.Orden));
+    return `<div class="rounded-2xl bg-slate-100 p-3">
+      <div class="flex items-center justify-between px-1 mb-3">
+        <p class="flex items-center gap-2 font-bold text-sm text-slate-700"><span class="h-2.5 w-2.5 rounded-full" style="background:${c.c}"></span>${c.e}</p>
+        <span class="insignia bg-white text-slate-600">${ts.length}</span>
+      </div>
+      <div class="kb-col space-y-2.5 rounded-xl" data-estado="${c.e}">${ts.map(tarjetaTarea).join('') || '<p class="py-6 text-center text-xs text-slate-400">Sin tareas</p>'}</div>
+      ${c.e === 'Pendiente' ? '<button data-acc="nueva-tarea" class="solo-rrhh btn-fantasma btn-sm w-full mt-2"><i data-lucide="plus" class="w-4 h-4"></i>Agregar tarea</button>' : ''}
+    </div>`;
+  }).join('');
+  renderTabla('ta-tabla', 't-tareas', [
+    { t: 'Tarea', v: t => esc(t.Titulo), c: t => t.Titulo }, { t: 'Descripción', v: t => esc(t.Descripcion), c: t => t.Descripcion },
+    { t: 'Estado', v: t => esc(t.Estado), c: t => t.Estado }, { t: 'Prioridad', v: t => esc(t.Prioridad), c: t => t.Prioridad },
+    { t: 'Responsable', v: t => esc(nombreCompleto(empPorId(t.ResponsableID))), c: t => t.ResponsableID ? nombreCompleto(empPorId(t.ResponsableID)) : '' },
+    { t: 'Departamento', v: t => esc(t.Departamento), c: t => t.Departamento }, { t: 'Fecha límite', v: t => esc(t.FechaLimite), c: t => t.FechaLimite },
+    { t: 'Etiquetas', v: t => esc(t.Etiquetas), c: t => t.Etiquetas }, { t: 'Creada', v: t => esc(t.Creado), c: t => t.Creado }, { t: 'Completada', v: t => esc(t.Completado), c: t => t.Completado }
+  ], lista);
+  iconos();
+}
+
+/** Arrastrar y soltar (computadora). En el celular se usan las flechas de cada tarjeta. */
+function prepararTablero() {
+  const tab = $('#ta-tablero');
+  let arrastrada = null;
+  tab.addEventListener('dragstart', ev => {
+    const c = ev.target.closest('.kb-tarjeta');
+    if (!c || !esRRHH()) return ev.preventDefault();
+    arrastrada = c.dataset.id;
+    c.classList.add('arrastrando');
+    ev.dataTransfer.effectAllowed = 'move';
+    try { ev.dataTransfer.setData('text/plain', arrastrada); } catch (e) { /* nada */ }
+  });
+  tab.addEventListener('dragend', ev => { ev.target.closest?.('.kb-tarjeta')?.classList.remove('arrastrando'); $$('.kb-col.sobre').forEach(x => x.classList.remove('sobre')); arrastrada = null; });
+  tab.addEventListener('dragover', ev => {
+    const col = ev.target.closest('.kb-col');
+    if (!col || !arrastrada) return;
+    ev.preventDefault();
+    $$('.kb-col.sobre').forEach(x => x !== col && x.classList.remove('sobre'));
+    col.classList.add('sobre');
+  });
+  tab.addEventListener('drop', ev => {
+    const col = ev.target.closest('.kb-col');
+    if (!col || !arrastrada) return;
+    ev.preventDefault();
+    col.classList.remove('sobre');
+    const estado = col.dataset.estado;
+    const otras = $$('.kb-tarjeta', col).filter(c => c.dataset.id !== arrastrada);
+    const desp = otras.findIndex(c => { const r = c.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+    const ord = id => num((S.plan.tareas.find(t => t.ID === id) || {}).Orden);
+    let orden;
+    if (!otras.length) orden = 1;
+    else if (desp === -1) orden = ord(otras[otras.length - 1].dataset.id) + 1;
+    else if (desp === 0) orden = ord(otras[0].dataset.id) - 1;
+    else orden = (ord(otras[desp - 1].dataset.id) + ord(otras[desp].dataset.id)) / 2;
+    moverTareaA(arrastrada, estado, orden);
+  });
+}
+
+async function moverTareaA(id, estado, orden) {
+  const t = S.plan.tareas.find(x => x.ID === id);
+  if (!t) return;
+  const antes = { Estado: t.Estado, Orden: t.Orden };
+  if (orden === undefined) orden = S.plan.tareas.filter(x => x.Estado === estado && x.ID !== id).reduce((m, x) => Math.max(m, num(x.Orden)), 0) + 1;
+  Object.assign(t, { Estado: estado, Orden: String(orden) });
+  pintarTareas();
+  try {
+    const r = await api('moverTarea', { id, estado, orden }, { silencioso: true });
+    Object.assign(t, r);
+    if (estado === 'Hecho' && antes.Estado !== 'Hecho') toast('¡Tarea completada! ✅', 'ok');
+    pintarTareas();
+  } catch (e) { Object.assign(t, antes); pintarTareas(); toast(e.message, 'error'); }
+}
+
+function moverTareaPaso(id, dir) {
+  const t = S.plan.tareas.find(x => x.ID === id);
+  const i = COLS_TAREA.findIndex(c => c.e === t.Estado) + Number(dir);
+  if (i >= 0 && i < COLS_TAREA.length) moverTareaA(id, COLS_TAREA[i].e);
+}
+
+function formTarea(id = null, { estado = 'Pendiente', fecha = '' } = {}) {
+  const t = id ? S.plan.tareas.find(x => x.ID === id) : { Estado: estado, Prioridad: 'Media', FechaLimite: fecha };
+  if (!t) return toast('Tarea no encontrada.', 'error');
+  const rr = esRRHH(), dis = rr ? '' : 'disabled';
+  const activos = S.empleados.filter(e => e.Estado !== 'Inactivo' || e.ID === t.ResponsableID).sort(ordenarNombre);
+  abrirModal({
+    titulo: id ? (rr ? 'Editar tarea' : 'Tarea') : 'Nueva tarea',
+    ancho: 'sm:max-w-xl',
+    cuerpo: `<form id="f-tarea" class="space-y-4" onsubmit="return false">
+      <input type="hidden" name="ID" value="${esc(t.ID || '')}">
+      <div><label class="etiqueta">Título *</label><input name="Titulo" class="campo" required maxlength="120" value="${esc(t.Titulo || '')}" placeholder="Ej.: Inventario de tintas del mes" ${dis}></div>
+      <div><label class="etiqueta">Descripción</label><textarea name="Descripcion" rows="3" class="campo" maxlength="2000" placeholder="Detalles, pasos, materiales…" ${dis}>${esc(t.Descripcion || '')}</textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">Estado</label><select name="Estado" class="campo" ${dis}>${opciones(COLS_TAREA.map(c => c.e), t.Estado)}</select></div>
+        <div><label class="etiqueta">Prioridad</label><select name="Prioridad" class="campo" ${dis}>${opciones(['Baja', 'Media', 'Alta', 'Urgente'], t.Prioridad)}</select></div>
+        <div><label class="etiqueta">Responsable</label><select name="ResponsableID" class="campo" ${dis}>${opciones(activos.map(e => ({ v: e.ID, t: nombreCompleto(e) })), t.ResponsableID || '', 'Sin asignar')}</select></div>
+        <div><label class="etiqueta">Fecha límite</label><input name="FechaLimite" type="date" class="campo" value="${esc(t.FechaLimite || '')}" ${dis}></div>
+        <div><label class="etiqueta">Departamento</label><select name="Departamento" class="campo" ${dis}>${opciones(S.sesion.departamentos || [], t.Departamento || '', 'Ninguno en particular')}</select></div>
+        <div><label class="etiqueta">Etiquetas</label><input name="Etiquetas" class="campo" maxlength="120" value="${esc(t.Etiquetas || '')}" placeholder="almacén, cliente X" ${dis}></div>
+      </div>
+      ${rr ? '<p class="text-xs text-slate-500">Si asignas un responsable con correo, le llegará un aviso y verá la tarea en su celular, donde podrá marcarla como hecha.</p>' : ''}
+      ${t.ID ? `<p class="text-xs text-slate-400">Creada por ${esc(t.CreadoPor || '—')} el ${esc(String(t.Creado || '').slice(0, 16))}${t.Completado ? ` · completada el ${esc(String(t.Completado).slice(0, 16))}` : ''}</p>` : ''}
+    </form>`,
+    pie: rr ? `${t.ID ? `<button data-acc="borrar-tarea" data-id="${esc(t.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button>` : ''}
+      <button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-tarea" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
+      : `<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
+  });
+}
+
+async function guardarTareaForm() {
+  const f = $('#f-tarea');
+  if (!f.reportValidity()) return;
+  const datos = datosFormulario(f);
+  try {
+    const r = await api('guardarTarea', { tarea: datos }, { texto: 'Guardando tarea…' });
+    const i = S.plan.tareas.findIndex(t => t.ID === r.ID);
+    if (i >= 0) S.plan.tareas[i] = r; else S.plan.tareas.push(r);
+    toast(datos.ID ? 'Tarea actualizada.' : 'Tarea creada.', 'ok');
+    cerrarModal();
+    if (S.seccion === 'tareas') pintarTareas();
+    if (S.seccion === 'agenda') pintarAgenda();
+  } catch (e) { toast(e.message, 'error', 6000); }
+}
+
+async function borrarTarea(id) {
+  if (!await confirmar('La tarea se eliminará de forma permanente.', { titulo: '¿Eliminar tarea?' })) return;
+  try {
+    await api('eliminarTarea', { id }, { texto: 'Eliminando…' });
+    S.plan.tareas = S.plan.tareas.filter(t => t.ID !== id);
+    toast('Tarea eliminada.', 'ok'); cerrarModal();
+    if (S.seccion === 'tareas') pintarTareas();
+    if (S.seccion === 'agenda') pintarAgenda();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ======================= 17l. AGENDA ======================= */
+const COLOR_EVENTO = { 'Reunión': '#2747c9', 'Actividad': '#C10866', 'Capacitación': '#7c3aed', 'Entrevista': '#0284c7', 'Entrega': '#d97706',
+  'Celebración': '#ca8a04', 'Recordatorio': '#64748b', 'Otro': '#64748b' };
+const FILTROS_AGENDA = [{ k: 'eventos', t: 'Actividades', c: '#C10866' }, { k: 'tareas', t: 'Tareas', c: '#0ea5e9' },
+  { k: 'permisos', t: 'Vacaciones y permisos', c: '#10b981' }, { k: 'cumple', t: 'Cumpleaños', c: '#EECF15' }];
+
+async function cargarAgenda() {
+  S.agMes = S.agMes || hoyStr().slice(0, 7);
+  S.agDia = S.agDia || hoyStr();
+  S.agFiltros = S.agFiltros || new Set(FILTROS_AGENDA.map(f => f.k));
+  try { await asegurarCatalogo(); await cargarPlan(); } catch (e) { return toast(e.message, 'error'); }
+  pintarAgenda();
+}
+
+/** Todo lo que pasa en una fecha: actividades, tareas que vencen, vacaciones/permisos y cumpleaños. */
+function itemsDelDia(f) {
+  const out = [], fl = S.agFiltros || new Set(FILTROS_AGENDA.map(x => x.k));
+  if (fl.has('eventos')) (S.plan?.eventos || []).filter(e => e.Fecha === f).sort((a, b) => (a.HoraInicio || '99') < (b.HoraInicio || '99') ? -1 : 1)
+    .forEach(e => out.push({ tipo: 'evento', id: e.ID, color: COLOR_EVENTO[e.Tipo] || '#64748b', hora: e.HoraInicio, titulo: e.Titulo, sub: [e.Tipo, e.HoraInicio ? e.HoraInicio + (e.HoraFin ? '–' + e.HoraFin : '') : 'Todo el día', e.Lugar].filter(Boolean).join(' · '), obj: e }));
+  if (fl.has('tareas')) (S.plan?.tareas || []).filter(t => t.FechaLimite === f)
+    .forEach(t => out.push({ tipo: 'tarea', id: t.ID, color: t.Estado === 'Hecho' ? '#10b981' : t.Prioridad === 'Urgente' ? '#e11d48' : '#0ea5e9', titulo: (t.Estado === 'Hecho' ? '✓ ' : '☐ ') + t.Titulo, sub: `Tarea · ${t.Estado} · ${t.ResponsableID ? nombreCompleto(empPorId(t.ResponsableID)) : 'sin asignar'}`, hecha: t.Estado === 'Hecho', obj: t }));
+  if (fl.has('permisos') && diaSemana(f) !== 7) (S.permisos || []).filter(p => (p.Estado === 'Aprobado' || p.Estado === 'Pendiente') && p.FechaInicio <= f && p.FechaFin >= f)
+    .forEach(p => { const e = empPorId(p.EmpleadoID); out.push({ tipo: 'permiso', id: p.ID, color: p.Estado === 'Pendiente' ? '#94a3b8' : '#10b981', titulo: `${p.Tipo === 'Vacaciones' ? '🌴' : '📄'} ${e ? String(e.Nombres).split(' ')[0] + ' ' + String(e.Apellidos).split(' ')[0] : p.EmpleadoID}`, sub: `${p.Tipo}${p.Estado === 'Pendiente' ? ' (por aprobar)' : ''}`, obj: p }); });
+  if (fl.has('cumple')) S.empleados.filter(e => e.Estado !== 'Inactivo' && /^\d{4}-\d{2}-\d{2}/.test(e.FechaNacimiento || '') && e.FechaNacimiento.slice(5, 10) === f.slice(5, 10))
+    .forEach(e => out.push({ tipo: 'cumple', id: e.ID, color: '#ca8a04', titulo: `🎂 ${String(e.Nombres).split(' ')[0]} ${String(e.Apellidos).split(' ')[0]}`, sub: `Cumple ${Number(f.slice(0, 4)) - Number(e.FechaNacimiento.slice(0, 4))} años · ${e.Departamento}`, obj: e }));
+  return out;
+}
+
+function pintarAgenda() {
+  if (!S.plan || !S.agMes) return;
+  const [y, m] = S.agMes.split('-').map(Number);
+  const primero = `${S.agMes}-01`, hoy = hoyStr();
+  $('#ag-titulo').textContent = fmtPeriodo(S.agMes);
+  $('#ag-filtros').innerHTML = FILTROS_AGENDA.map(f => `<button data-acc="ag-filtro" data-k="${f.k}" class="insignia border ${S.agFiltros.has(f.k) ? 'bg-white text-slate-700 border-slate-300' : 'bg-transparent text-slate-400 border-dashed border-slate-300 line-through'}">
+    <span class="h-2 w-2 rounded-full" style="background:${f.c}"></span>${f.t}</button>`).join('');
+  const inicio = sumarDias(primero, -(diaSemana(primero) - 1));
+  const ultimo = fechaStr(new Date(y, m, 0));
+  const fin = sumarDias(ultimo, 7 - diaSemana(ultimo));
+  $('#ag-calendario').innerHTML = rangoFechas(inicio, fin).map(f => {
+    const items = itemsDelDia(f), fuera = f.slice(0, 7) !== S.agMes, dom = diaSemana(f) === 7;
+    return `<div data-acc="ag-dia" data-f="${f}" class="cal-dia border-b border-r border-slate-100 p-1.5 cursor-pointer hover:bg-slate-50 ${fuera ? 'bg-slate-50/70' : ''} ${f === S.agDia ? 'ring-2 ring-inset ring-marca-600' : ''}">
+      <div class="flex justify-between items-center mb-1"><span class="text-xs font-bold h-6 min-w-6 px-1.5 rounded-full flex items-center justify-center ${f === hoy ? 'bg-marca-700 text-white' : fuera || dom ? 'text-slate-400' : 'text-slate-700'}">${Number(f.slice(8))}</span>
+        ${items.length ? `<span class="sm:hidden h-1.5 w-1.5 rounded-full bg-marca-600"></span>` : ''}</div>
+      <div class="space-y-0.5 hidden sm:block">${items.slice(0, 3).map(x => `<div class="cal-chip ${x.hecha ? 'line-through opacity-60' : ''}" style="background:${x.color}1f;color:${x.color}" title="${esc(x.titulo + ' · ' + x.sub)}"><span class="h-1.5 w-1.5 rounded-full shrink-0" style="background:${x.color}"></span><span class="cal-chip-txt truncate">${x.hora ? esc(x.hora) + ' ' : ''}${esc(x.titulo)}</span></div>`).join('')}
+        ${items.length > 3 ? `<p class="text-[10px] font-semibold text-slate-500 pl-1">+${items.length - 3} más</p>` : ''}</div>
+    </div>`;
+  }).join('');
+  pintarDiaAgenda();
+  iconos();
+}
+
+function pintarDiaAgenda() {
+  const f = S.agDia, items = itemsDelDia(f);
+  $('#ag-dia-titulo').textContent = aFecha(f).toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const acc = { evento: 'ver-evento', tarea: 'ver-tarea', permiso: 'nav', cumple: 'ver-expediente' };
+  $('#ag-dia').innerHTML = (items.length ? items.map(x => `
+    <button data-acc="${acc[x.tipo]}" data-id="${esc(x.id)}" ${x.tipo === 'permiso' ? 'data-sec="permisos"' : ''} class="w-full text-left px-5 py-3 flex gap-3 hover:bg-slate-50">
+      <span class="mt-1 h-3 w-3 rounded-full shrink-0" style="background:${x.color}"></span>
+      <span class="min-w-0"><span class="block text-sm font-semibold text-slate-800 ${x.hecha ? 'line-through' : ''}">${esc(x.titulo)}</span>
+        <span class="block text-xs text-slate-500">${esc(x.sub)}</span>
+        ${x.tipo === 'evento' && x.obj.Descripcion ? `<span class="block text-xs text-slate-400 mt-0.5 line-clamp-2">${esc(x.obj.Descripcion)}</span>` : ''}</span>
+    </button>`).join('') : '<p class="px-5 py-8 text-center text-sm text-slate-400">Nada programado este día.</p>') +
+    `<div class="px-5 py-3 solo-rrhh flex flex-wrap gap-2"><button data-acc="nuevo-evento" data-f="${f}" class="btn-sec btn-sm"><i data-lucide="calendar-plus" class="w-4 h-4"></i>Actividad este día</button>
+      <button data-acc="nueva-tarea" data-f="${f}" class="btn-sec btn-sm"><i data-lucide="plus" class="w-4 h-4"></i>Tarea que vence este día</button></div>`;
+  iconos();
+}
+
+function formEvento(id = null, { fecha = '' } = {}) {
+  const ev = id ? S.plan.eventos.find(x => x.ID === id) : { Fecha: fecha || S.agDia || hoyStr(), Tipo: 'Reunión', Visibilidad: 'TODOS' };
+  if (!ev) return toast('Actividad no encontrada.', 'error');
+  const rr = esRRHH(), dis = rr ? '' : 'disabled';
+  abrirModal({
+    titulo: id ? (rr ? 'Editar actividad' : ev.Titulo) : 'Nueva actividad',
+    ancho: 'sm:max-w-xl',
+    cuerpo: `<form id="f-evento" class="space-y-4" onsubmit="return false">
+      <input type="hidden" name="ID" value="${esc(ev.ID || '')}">
+      <div><label class="etiqueta">Título *</label><input name="Titulo" class="campo" required maxlength="120" value="${esc(ev.Titulo || '')}" placeholder="Ej.: Reunión de planificación" ${dis}></div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="col-span-2"><label class="etiqueta">Tipo</label><select name="Tipo" class="campo" ${dis}>${opciones(S.plan.tiposEvento || Object.keys(COLOR_EVENTO), ev.Tipo)}</select></div>
+        <div class="col-span-2"><label class="etiqueta">Fecha *</label><input name="Fecha" type="date" class="campo" required value="${esc(ev.Fecha)}" ${dis}></div>
+        <div class="col-span-1"><label class="etiqueta">Desde</label><input name="HoraInicio" type="time" class="campo" value="${esc(ev.HoraInicio || '')}" ${dis}></div>
+        <div class="col-span-1"><label class="etiqueta">Hasta</label><input name="HoraFin" type="time" class="campo" value="${esc(ev.HoraFin || '')}" ${dis}></div>
+        <div class="col-span-2"><label class="etiqueta">Lugar</label><input name="Lugar" class="campo" maxlength="120" value="${esc(ev.Lugar || '')}" placeholder="Sala de reuniones, taller…" ${dis}></div>
+      </div>
+      <p class="text-xs text-slate-400 -mt-2">Sin horas = todo el día.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">¿Quién la ve?</label><select name="Visibilidad" class="campo" ${dis}>${opciones([{ v: 'TODOS', t: 'Todo el personal' }, { v: 'DEPARTAMENTO', t: 'Un departamento' }, { v: 'GESTION', t: 'Solo RRHH y Dirección' }], ev.Visibilidad)}</select></div>
+        <div data-si="depto"><label class="etiqueta">Departamento</label><select name="Departamento" class="campo" ${dis}>${opciones(S.sesion.departamentos || [], ev.Departamento || '', 'Selecciona…')}</select></div>
+      </div>
+      <div><label class="etiqueta">Descripción</label><textarea name="Descripcion" rows="3" class="campo" maxlength="2000" ${dis}>${esc(ev.Descripcion || '')}</textarea></div>
+      ${rr ? '<p class="text-xs text-slate-500">Las actividades para "todo el personal" o un departamento aparecen en el celular de cada empleado, en "Mis tareas y actividades".</p>' : ''}
+    </form>`,
+    pie: rr ? `${ev.ID ? `<button data-acc="borrar-evento" data-id="${esc(ev.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button>` : ''}
+      <button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-evento" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
+      : `<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
+  });
+  const f = $('#f-evento');
+  const cond = () => { $('[data-si="depto"]', f).classList.toggle('invisible', f.Visibilidad.value !== 'DEPARTAMENTO'); f.Departamento.required = f.Visibilidad.value === 'DEPARTAMENTO'; };
+  f.Visibilidad.addEventListener('change', cond); cond();
+}
+
+async function guardarEventoForm() {
+  const f = $('#f-evento');
+  if (!f.reportValidity()) return;
+  const datos = datosFormulario(f);
+  try {
+    const r = await api('guardarEvento', { evento: datos }, { texto: 'Guardando actividad…' });
+    const i = S.plan.eventos.findIndex(e => e.ID === r.ID);
+    if (i >= 0) S.plan.eventos[i] = r; else S.plan.eventos.push(r);
+    toast(datos.ID ? 'Actividad actualizada.' : 'Actividad creada.', 'ok');
+    cerrarModal();
+    S.agDia = r.Fecha; S.agMes = r.Fecha.slice(0, 7);
+    if (S.seccion === 'agenda') pintarAgenda();
+  } catch (e) { toast(e.message, 'error', 6000); }
+}
+
+async function borrarEvento(id) {
+  if (!await confirmar('La actividad se eliminará de la agenda.', { titulo: '¿Eliminar actividad?' })) return;
+  try {
+    await api('eliminarEvento', { id }, { texto: 'Eliminando…' });
+    S.plan.eventos = S.plan.eventos.filter(e => e.ID !== id);
+    toast('Actividad eliminada.', 'ok'); cerrarModal();
+    if (S.seccion === 'agenda') pintarAgenda();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ---------- En el celular del empleado: sus tareas y actividades ---------- */
+async function cargarMiAgenda() {
+  const card = $('#mc-agenda');
+  try {
+    const d = await api('miAgenda', {}, { silencioso: true });
+    S.miAgenda = d;
+    if (!d.tareas.length && !d.eventos.length) { card.classList.add('hidden'); return; }
+    card.classList.remove('hidden');
+    const sig = { 'Pendiente': ['En progreso', 'Empezar', 'play'], 'En progreso': ['Hecho', 'Listo', 'check'], 'En revisión': ['Hecho', 'Listo', 'check'] };
+    const tareas = d.tareas.sort((a, b) => (a.Estado === 'Hecho') - (b.Estado === 'Hecho') || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9'))).map(t => {
+      const v = estadoVencimiento(t), s = sig[t.Estado];
+      return `<div class="px-5 py-3 flex items-center gap-3">
+        <span class="h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${t.Estado === 'Hecho' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-700'}"><i data-lucide="${t.Estado === 'Hecho' ? 'circle-check' : 'square-kanban'}" class="w-5 h-5"></i></span>
+        <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800 ${t.Estado === 'Hecho' ? 'line-through text-slate-400' : ''}">${esc(t.Titulo)}</p>
+          <p class="text-xs ${v === 'vencida' ? 'text-rose-600 font-semibold' : v === 'pronto' ? 'text-amber-600' : 'text-slate-500'}">${esc(t.Estado)} · ${esc(t.Prioridad)}${t.FechaLimite ? ' · vence ' + esc(fmtFechaCorta(t.FechaLimite)) + (v === 'vencida' ? ' (vencida)' : '') : ''}</p></div>
+        ${s ? `<button data-acc="mi-tarea" data-id="${esc(t.ID)}" data-estado="${s[0]}" class="btn btn-sm ${s[0] === 'Hecho' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-navy-900 text-white hover:bg-navy-950'} shrink-0"><i data-lucide="${s[2]}" class="w-4 h-4"></i>${s[1]}</button>` : ''}
+      </div>`;
+    }).join('');
+    const eventos = d.eventos.map(e => `<div class="px-5 py-3 flex items-center gap-3">
+        <span class="h-9 w-9 shrink-0 rounded-xl flex flex-col items-center justify-center text-white leading-none" style="background:${COLOR_EVENTO[e.Tipo] || '#64748b'}"><span class="text-sm font-extrabold">${Number(e.Fecha.slice(8))}</span><span class="text-[9px] uppercase">${esc(MESES[Number(e.Fecha.slice(5, 7)) - 1])}</span></span>
+        <div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(e.Titulo)}</p>
+          <p class="text-xs text-slate-500">${esc([fmtFechaCorta(e.Fecha), e.HoraInicio ? e.HoraInicio + (e.HoraFin ? '–' + e.HoraFin : '') : 'Todo el día', e.Lugar].filter(Boolean).join(' · '))}</p></div>
+      </div>`).join('');
+    $('#mc-agenda-lista').innerHTML = tareas + eventos;
+    iconos();
+  } catch (e) { card.classList.add('hidden'); }
+}
+
+async function cambiarMiTarea(id, estado) {
+  try {
+    await api('moverTarea', { id, estado }, { texto: 'Actualizando…' });
+    toast(estado === 'Hecho' ? '¡Tarea completada! ✅ RRHH ya fue avisado.' : 'Tarea en progreso.', 'ok', 5000);
+    if (estado === 'Hecho') lanzarConfeti(1500);
+    cargarMiAgenda();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ======================= 17m. CURRÍCULUMS ======================= */
+const ESTILO_CV = { 'Nuevo': 'bg-sky-100 text-sky-700', 'En revisión': 'bg-amber-100 text-amber-700', 'Preseleccionado': 'bg-violet-100 text-violet-700',
+  'Entrevistado': 'bg-navy-100 text-navy-700', 'Contratado': 'bg-emerald-100 text-emerald-700', 'Descartado': 'bg-slate-200 text-slate-600' };
+
+function estrellasHTML(id, n, editable) {
+  n = Number(n) || 0;
+  return `<span class="estrellas inline-flex whitespace-nowrap" title="${n ? n + ' de 5 estrellas' : 'Sin calificar'}">${[1, 2, 3, 4, 5].map(i => editable
+    ? `<button type="button" data-acc="cv-estrella" data-id="${esc(id)}" data-n="${i}" class="${i <= n ? 'on' : ''}" aria-label="${i} estrellas">★</button>`
+    : `<button type="button" tabindex="-1" class="${i <= n ? 'on' : ''} cursor-default">★</button>`).join('')}</span>`;
+}
+
+async function cargarCurriculums() {
+  if (!S.cv) $('#cv-tabla').innerHTML = '<p class="text-center text-sm text-slate-400 py-16 pulso">Cargando currículums…</p>';
+  try {
+    await asegurarCatalogo();
+    const d = await api('curriculums', {}, { silencioso: !!S.cv });
+    S.cv = d;
+  } catch (e) { return toast(e.message, 'error'); }
+  const est = $('#cv-estado'), dep = $('#cv-depto'), ve = est.value, vd = dep.value;
+  est.innerHTML = opciones(S.cv.estados, '', 'Todos los estados');
+  dep.innerHTML = opciones(S.sesion.departamentos || [], '', 'Todos los departamentos');
+  est.value = ve; dep.value = vd;
+  pintarCurriculums();
+}
+
+function pintarCurriculums() {
+  if (!S.cv) return;
+  const q = normalizar($('#cv-buscar').value.trim()), est = $('#cv-estado').value, dep = $('#cv-depto').value, es = $('#cv-estrellas').value;
+  const todos = S.cv.curriculums;
+  const lista = todos.filter(c => {
+    if (est && c.Estado !== est) return false;
+    if (dep && c.Departamento !== dep) return false;
+    const n = num(c.Estrellas);
+    if (es === '0' ? n > 0 : es === '5' ? n !== 5 : es ? n < Number(es) : false) return false;
+    return !q || normalizar([c.Nombres, c.Apellidos, c.Cargo, c.Email, c.Telefono, c.Notas, c.Cedula, c.Fuente].join(' ')).includes(q);
+  }).sort((a, b) => num(b.Estrellas) - num(a.Estrellas) || (a.Recibido < b.Recibido ? 1 : -1));
+  const activos = todos.filter(c => !['Contratado', 'Descartado'].includes(c.Estado));
+  $('#cv-resumen').innerHTML = [
+    tarjetaKPI('inbox', 'Currículums', todos.length, `${activos.length} en proceso`, 'marca'),
+    tarjetaKPI('sparkles', 'Nuevos sin revisar', todos.filter(c => c.Estado === 'Nuevo').length, 'Estado "Nuevo"', 'azul'),
+    tarjetaKPI('star', '4 o 5 estrellas', todos.filter(c => num(c.Estrellas) >= 4).length, 'Candidatos destacados', 'ambar'),
+    tarjetaKPI('user-check', 'Contratados', todos.filter(c => c.Estado === 'Contratado').length, 'Desde el banco de currículums', 'verde')
+  ].join('');
+  const rr = esRRHH();
+  renderTabla('cv-tabla', 't-cv', [
+    { t: 'Candidato', v: c => `<button data-acc="editar-cv" data-id="${esc(c.ID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(c.Nombres + ' ' + (c.Apellidos || ''))}</button>
+        <div class="text-xs text-slate-500">${esc(c.Cargo || 'Cargo no indicado')}</div>
+        <div class="text-xs text-slate-400">${esc([c.Telefono, c.Email].filter(Boolean).join(' · '))}</div>`, s: c => c.Nombres + ' ' + c.Apellidos, c: c => (c.Nombres + ' ' + (c.Apellidos || '')).trim() },
+    { t: 'Cargo', v: c => esc(c.Cargo), c: c => c.Cargo, cls: 'hidden' },
+    { t: 'Correo', v: c => esc(c.Email), c: c => c.Email, cls: 'hidden' },
+    { t: 'Teléfono', v: c => esc(c.Telefono), c: c => c.Telefono, cls: 'hidden' },
+    { t: 'Cédula', v: c => esc(c.Cedula), c: c => c.Cedula, cls: 'hidden' },
+    { t: 'Recibido', v: c => esc(fmtFecha(c.Recibido)), s: c => c.Recibido, c: c => c.Recibido },
+    { t: 'Departamento', v: c => esc(c.Departamento || '—'), s: c => c.Departamento, c: c => c.Departamento },
+    { t: 'Fuente', v: c => `<span class="text-xs text-slate-500">${esc(c.Fuente || '—')}</span>`, c: c => c.Fuente },
+    { t: 'Experiencia', v: c => c.Experiencia !== '' ? `${esc(c.Experiencia)} año${c.Experiencia === '1' ? '' : 's'}` : '—', s: c => num(c.Experiencia), c: c => c.Experiencia, cls: 'text-right' },
+    { t: 'Pre-evaluación', v: c => estrellasHTML(c.ID, c.Estrellas, rr), s: c => num(c.Estrellas), c: c => c.Estrellas },
+    { t: 'Estado', v: c => `<span class="insignia ${ESTILO_CV[c.Estado] || ''}">${esc(c.Estado)}</span>${c.EmpleadoID ? `<button data-acc="ver-expediente" data-id="${esc(c.EmpleadoID)}" class="block text-xs text-navy-700 hover:text-marca-700 mt-1">Expediente ${esc(c.EmpleadoID)}</button>` : ''}`, s: c => c.Estado, c: c => c.Estado },
+    { t: 'Notas', v: c => esc(c.Notas), c: c => c.Notas, cls: 'hidden' },
+    { t: '', v: c => `<div class="flex justify-end gap-1 no-print whitespace-nowrap">
+        ${c.FileID ? `<button data-acc="ver-cv" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="Ver archivo"><i data-lucide="paperclip" class="w-4 h-4"></i></button>` : ''}
+        ${c.Estado !== 'Contratado' ? `<button data-acc="contratar-cv" data-id="${esc(c.ID)}" class="solo-rrhh btn-fantasma btn-sm text-emerald-700" title="Contratar: crear expediente"><i data-lucide="user-plus" class="w-4 h-4"></i></button>` : ''}
+        <button data-acc="editar-cv" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="${rr ? 'Editar' : 'Ver'}"><i data-lucide="${rr ? 'pencil' : 'eye'}" class="w-4 h-4"></i></button>
+        <button data-acc="borrar-cv" data-id="${esc(c.ID)}" class="solo-rrhh btn-fantasma btn-sm text-rose-600" title="Eliminar"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`, cls: 'text-right' }
+  ], lista, { vacio: todos.length ? 'Ningún currículum coincide con los filtros.' : 'Todavía no hay currículums. Pulsa "Registrar currículum" para agregar el primero.' });
+}
+
+async function calificarCV(id, n) {
+  const c = S.cv.curriculums.find(x => x.ID === id);
+  if (!c) return;
+  const nuevo = num(c.Estrellas) === Number(n) ? 0 : Number(n);
+  const antes = c.Estrellas;
+  c.Estrellas = nuevo ? String(nuevo) : '';
+  pintarCurriculums();
+  try { await api('calificarCurriculum', { id, estrellas: nuevo }, { silencioso: true }); }
+  catch (e) { c.Estrellas = antes; pintarCurriculums(); toast(e.message, 'error'); }
+}
+
+function formCurriculum(id = null) {
+  const c = id ? S.cv.curriculums.find(x => x.ID === id) : { Recibido: hoyStr(), Estado: 'Nuevo', Fuente: 'Anuncio en redes' };
+  if (!c) return toast('Currículum no encontrado.', 'error');
+  const rr = esRRHH(), dis = rr ? '' : 'disabled';
+  const inp = (n, t, tipo = 'text', extra = '') => `<div><label class="etiqueta">${t}</label><input name="${n}" type="${tipo}" class="campo" value="${esc(c[n] || '')}" ${extra} ${dis}></div>`;
+  abrirModal({
+    titulo: id ? `${rr ? 'Editar' : ''} ${c.Nombres} ${c.Apellidos || ''}`.trim() : 'Registrar currículum',
+    ancho: 'sm:max-w-2xl',
+    cuerpo: `<form id="f-cv" class="space-y-4" onsubmit="return false">
+      <input type="hidden" name="ID" value="${esc(c.ID || '')}">
+      <div class="grid sm:grid-cols-2 gap-4">
+        ${inp('Nombres', 'Nombres *', 'text', 'required maxlength="60" ' + ATRIB_NOMBRE)}${inp('Apellidos', 'Apellidos', 'text', 'maxlength="60" ' + ATRIB_NOMBRE)}
+        ${inp('Telefono', 'Teléfono', 'tel', 'data-tel inputmode="tel" placeholder="0412-1234567"')}${inp('Email', 'Correo', 'email', 'placeholder="nombre@gmail.com"')}
+        ${inp('Cedula', 'Cédula (solo números)', 'text', 'inputmode="numeric" pattern="[VEve]?-?\\d{6,8}" maxlength="10"')}${inp('Recibido', 'Fecha de recepción', 'date', `max="${hoyStr()}"`)}
+        ${inp('Cargo', 'Cargo al que aspira', 'text', 'maxlength="80" placeholder="Diseñador gráfico, operador de plotter…"')}
+        <div><label class="etiqueta">Departamento</label><select name="Departamento" class="campo" ${dis}>${opciones(S.sesion.departamentos || [], c.Departamento || '', 'Sin definir')}</select></div>
+        <div><label class="etiqueta">¿Cómo llegó?</label><select name="Fuente" class="campo" ${dis}>${opciones(S.cv.fuentes, c.Fuente || '', 'Sin indicar')}</select></div>
+        <div class="grid grid-cols-2 gap-3">${inp('Experiencia', 'Experiencia (años)', 'number', 'min="0" max="60"')}
+          <div><label class="etiqueta">Instrucción</label><select name="NivelInstruccion" class="campo" ${dis}>${opciones(OPC.instruccion, c.NivelInstruccion || '')}</select></div></div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4 items-end">
+        <div><label class="etiqueta">Pre-evaluación</label><input type="hidden" name="Estrellas" value="${esc(c.Estrellas || '')}">
+          <div id="cv-form-estrellas" class="text-2xl">${estrellasHTML('form', c.Estrellas, rr)}</div></div>
+        <div><label class="etiqueta">Estado</label><select name="Estado" class="campo" ${dis}>${opciones(S.cv.estados, c.Estado)}</select></div>
+      </div>
+      <div><label class="etiqueta">Notas (impresión, entrevista, referencias…)</label><textarea name="Notas" rows="3" maxlength="2000" class="campo" ${dis}>${esc(c.Notas || '')}</textarea></div>
+      ${rr ? `<div><label class="etiqueta">Archivo del currículum (PDF, Word o foto)${c.FileNombre ? ` · actual: <b>${esc(c.FileNombre)}</b>` : ''}</label>
+        <input name="archivo" type="file" accept=".pdf,.doc,.docx,image/*" class="campo file:mr-3 file:rounded-lg file:border-0 file:bg-marca-50 file:px-3 file:py-1 file:text-marca-700 file:font-semibold">
+        ${c.FileNombre ? '<p class="text-xs text-slate-400 mt-1">Si subes otro, reemplaza al actual.</p>' : ''}</div>` : ''}
+    </form>`,
+    pie: rr ? `${c.FileID ? `<button data-acc="ver-cv" data-id="${esc(c.ID)}" class="btn-sec mr-auto"><i data-lucide="paperclip" class="w-4 h-4"></i>Ver archivo</button>` : ''}
+      <button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-cv" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
+      : `${c.FileID ? `<button data-acc="ver-cv" data-id="${esc(c.ID)}" class="btn-sec mr-auto"><i data-lucide="paperclip" class="w-4 h-4"></i>Ver archivo</button>` : ''}<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
+  });
+}
+
+function estrellaFormulario(n) {
+  const f = $('#f-cv');
+  const nuevo = num(f.Estrellas.value) === Number(n) ? 0 : Number(n);
+  f.Estrellas.value = nuevo || '';
+  $('#cv-form-estrellas').innerHTML = estrellasHTML('form', nuevo, true);
+}
+
+async function guardarCurriculumForm() {
+  const f = $('#f-cv');
+  if (!f.reportValidity()) return;
+  const datos = datosFormulario(f);
+  delete datos.archivo;
+  try {
+    cargando(true, 'Preparando archivo…');
+    let archivo = null;
+    try { archivo = await archivoParaEnviar(f.archivo?.files[0]); } finally { cargando(false); }
+    const r = await api('guardarCurriculum', { curriculum: datos, archivo }, { texto: 'Guardando currículum…' });
+    const i = S.cv.curriculums.findIndex(c => c.ID === r.ID);
+    if (i >= 0) S.cv.curriculums[i] = r; else S.cv.curriculums.push(r);
+    toast(datos.ID ? 'Currículum actualizado.' : 'Currículum registrado.', 'ok');
+    if (r._aviso) toast(r._aviso, 'aviso', 9000);
+    cerrarModal(); pintarCurriculums();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+async function borrarCurriculum(id) {
+  if (!await confirmar('Se eliminará el registro y su archivo irá a la papelera de Google Drive.', { titulo: '¿Eliminar currículum?' })) return;
+  try {
+    await api('eliminarCurriculum', { id }, { texto: 'Eliminando…' });
+    S.cv.curriculums = S.cv.curriculums.filter(c => c.ID !== id);
+    toast('Currículum eliminado.', 'ok'); pintarCurriculums();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/** Contratar: abre el formulario de nuevo empleado con los datos del currículum. */
+function contratarCV(id) {
+  const c = S.cv.curriculums.find(x => x.ID === id);
+  if (!c) return;
+  formEmpleado(null, { cv: c, base: { Nombres: c.Nombres, Apellidos: c.Apellidos, Cedula: c.Cedula, Email: c.Email, Telefono: c.Telefono,
+    Departamento: (S.sesion.departamentos || []).includes(c.Departamento) ? c.Departamento : '', Cargo: c.Cargo, NivelInstruccion: c.NivelInstruccion } });
+}
+
+/* ======================= 17n. REGISTRO DE ACTIVIDAD (solo lectura) ======================= */
+const CAT_REGISTRO = {
+  'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
+  'Empleados y accesos': ['EMPLEADO_CREADO', 'EMPLEADO_EDITADO', 'EMPLEADOS_IMPORTADOS', 'FOTO_ACTUALIZADA', 'SOLICITUD_ACCESO', 'ACCESO_APROBADO', 'ACCESO_RECHAZADO', 'ACCESO_VINCULADO'],
+  'Permisos y vacaciones': ['PERMISO_CREADO', 'PERMISO_EDITADO', 'PERMISO_ELIMINADO', 'PERMISO_SOLICITADO', 'PERMISO_ANULADO', 'PERMISO_APROBADO', 'PERMISO_RECHAZADO'],
+  'Documentos y manuales': ['DOCUMENTO_SUBIDO', 'DOCUMENTO_ELIMINADO', 'MANUAL_SUBIDO', 'MANUAL_ELIMINADO'],
+  'Desempeño y reconocimientos': ['EVALUACION_CREADA', 'EVALUACION_EDITADA', 'EVALUACION_ELIMINADA', 'EMPLEADO_DEL_MES', 'EMPLEADO_DEL_MES_QUITADO', 'DEPARTAMENTO_DEL_MES'],
+  'Tareas y agenda': ['TAREA_CREADA', 'TAREA_EDITADA', 'TAREA_MOVIDA', 'TAREA_ELIMINADA', 'EVENTO_CREADO', 'EVENTO_EDITADO', 'EVENTO_ELIMINADO'],
+  'Currículums': ['CURRICULUM_REGISTRADO', 'CURRICULUM_EDITADO', 'CURRICULUM_CALIFICADO', 'CURRICULUM_ELIMINADO'],
+  'Ajustes y sistema': ['AJUSTES', 'DEPARTAMENTO_CREADO', 'DEPARTAMENTO_RENOMBRADO', 'DEPARTAMENTO_ACTIVADO', 'DEPARTAMENTO_DESACTIVADO', 'DEPARTAMENTO_ELIMINADO', 'RESPALDO']
+};
+const COLOR_CAT = ['bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700',
+  'bg-marca-100 text-marca-700', 'bg-navy-100 text-navy-700', 'bg-oro-100 text-oro-700', 'bg-slate-200 text-slate-700'];
+const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJUSTES: 'Cambió ajustes', RESPALDO: 'Respaldo creado', EMPLEADO_DEL_MES: 'Empleado del mes',
+  DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso' };
+const etiquetaAccion = a => ETIQUETA_ACCION[a] || (a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' '))
+  .replace(/^Curriculum/, 'Currículum').replace(/^Evaluacion/, 'Evaluación').replace(/ dia/, ' día');
+const catDeAccion = a => Object.keys(CAT_REGISTRO).find(k => CAT_REGISTRO[k].includes(a)) || 'Otros';
+
+function prepararFiltrosRegistro() {
+  if ($('#rg-desde').value) return;
+  $('#rg-desde').value = sumarDias(hoyStr(), -30);
+  $('#rg-hasta').value = hoyStr();
+  $('#rg-categoria').innerHTML = opciones(Object.keys(CAT_REGISTRO), '', 'Todos los tipos');
+}
+
+async function cargarRegistro(mas = false) {
+  try { await asegurarCatalogo(); } catch (e) { return toast(e.message, 'error'); }
+  prepararFiltrosRegistro();
+  const sel = $('#rg-usuario'), v = sel.value;
+  const correos = [...new Set(S.empleados.filter(e => e.Email).map(e => e.Email).concat([S.sesion.email]))].sort();
+  sel.innerHTML = opciones(correos.map(c => { const e = S.empleados.find(x => x.Email === c); return { v: c, t: e ? nombreCompleto(e) : c }; }), v, 'Todos los usuarios');
+  sel.value = v;
+  const cat = $('#rg-categoria').value;
+  const p = { desde: $('#rg-desde').value, hasta: $('#rg-hasta').value, email: sel.value, q: $('#rg-buscar').value.trim(),
+    acciones: cat ? CAT_REGISTRO[cat] : [], limite: 200, antes: mas ? S.reg?.siguiente : null };
+  if (!mas) $('#rg-tabla').innerHTML = '<p class="text-center text-sm text-slate-400 py-16 pulso">Cargando registro…</p>';
+  try {
+    const d = await api('auditoria', p, { silencioso: true });
+    S.reg = { lista: (mas && S.reg ? S.reg.lista : []).concat(d.registros), siguiente: d.siguiente, total: d.total };
+  } catch (e) { return toast(e.message, 'error'); }
+  const porCorreo = {};
+  S.empleados.forEach(e => { if (e.Email) porCorreo[e.Email.toLowerCase()] = e; });
+  const cats = Object.keys(CAT_REGISTRO);
+  renderTabla('rg-tabla', 't-registro', [
+    { t: 'Fecha y hora', v: r => `<span class="whitespace-nowrap tabular-nums">${esc(r.Fecha.slice(0, 16))}</span>`, c: r => r.Fecha },
+    { t: 'Usuario', v: r => { const e = porCorreo[String(r.Email).toLowerCase()]; return e ? `<span class="font-semibold text-slate-800">${esc(nombreCompleto(e))}</span><div class="text-xs text-slate-400">${esc(r.Email)}</div>` : `<span class="text-slate-600">${esc(r.Email || '—')}</span>`; }, c: r => r.Email },
+    { t: 'Acción', v: r => { const c = catDeAccion(r.Accion); return `<span class="insignia ${COLOR_CAT[cats.indexOf(c)] || 'bg-slate-100 text-slate-600'}">${esc(etiquetaAccion(r.Accion))}</span><div class="text-[11px] text-slate-400 mt-0.5">${esc(c)}</div>`; }, c: r => r.Accion },
+    { t: 'Detalle', v: r => `<span class="text-xs text-slate-600">${esc(r.Detalle)}</span>`, c: r => r.Detalle, cls: 'envolver' }
+  ], S.reg.lista, { vacio: 'No hay movimientos con estos filtros.' });
+  $('#rg-mas').classList.toggle('hidden', !S.reg.siguiente);
+  $('#rg-mas').textContent = `Cargar más (${S.reg.lista.length} mostrados)`;
+}
+
+/* ======================= 17o. CENTRO DE AYUDA ======================= */
+const GUIAS_INCLUIDAS = [
+  { ID: 'guia-rapida', Titulo: 'Guía rápida de uso', Categoria: 'Guías de usuario', Audiencia: 'TODOS', url: 'ayuda/guia-rapida.pdf',
+    Descripcion: 'Una sola hoja con lo esencial: instalar la app, marcar entrada y salida, pedir marcajes y permisos, tus tareas y más.', incluida: true }
+];
+
+function iconoArchivo(m) {
+  const t = String(m.FileMime || (m.url ? 'application/pdf' : ''));
+  return /pdf/.test(t) ? ['file-text', 'bg-rose-50 text-rose-600'] : /image/.test(t) ? ['image', 'bg-sky-50 text-sky-600']
+    : /word|document/.test(t) ? ['file-type', 'bg-blue-50 text-blue-600'] : /sheet|excel/.test(t) ? ['file-spreadsheet', 'bg-emerald-50 text-emerald-600'] : ['file', 'bg-slate-100 text-slate-600'];
+}
+
+function ayudaHTML(manuales, categorias) {
+  const todos = GUIAS_INCLUIDAS.concat(manuales);
+  const cats = (categorias || ['Guías de usuario', 'Procedimientos', 'Normas y políticas', 'Formatos', 'Otros']).filter(c => todos.some(m => m.Categoria === c));
+  const tarjeta = m => { const [ic, col] = iconoArchivo(m); return `<div class="tarjeta p-4 flex items-start gap-3">
+      <span class="h-11 w-11 rounded-xl ${col} flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-5 h-5"></i></span>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-slate-800">${esc(m.Titulo)}</p>
+        ${m.Descripcion ? `<p class="text-xs text-slate-500 mt-0.5">${esc(m.Descripcion)}</p>` : ''}
+        <div class="flex flex-wrap items-center gap-1.5 mt-2">
+          ${m.incluida ? '<span class="insignia bg-marca-50 text-marca-700">Incluida en la app</span>' : ''}
+          ${m.Audiencia === 'GESTION' ? '<span class="insignia bg-navy-50 text-navy-700">Solo RRHH y Dirección</span>' : ''}
+          ${m.Tamano ? `<span class="text-[11px] text-slate-400">${esc(fmtTamano(m.Tamano))}</span>` : ''}
+        </div>
+      </div>
+      <div class="flex flex-col gap-1 shrink-0">
+        <button data-acc="ver-manual" data-id="${esc(m.ID)}" ${m.url ? `data-url="${esc(m.url)}"` : ''} class="btn-primario btn-sm"><i data-lucide="book-open" class="w-4 h-4"></i>Ver</button>
+        ${!m.incluida ? `<button data-acc="borrar-manual" data-id="${esc(m.ID)}" class="solo-rrhh btn-fantasma btn-sm text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+      </div></div>`; };
+  return cats.map(c => `<div class="mb-6"><h3 class="text-xs font-bold uppercase tracking-wide text-marca-700 mb-3">${esc(c)}</h3>
+    <div class="grid md:grid-cols-2 gap-3">${todos.filter(m => m.Categoria === c).map(tarjeta).join('')}</div></div>`).join('') +
+    `<p class="text-xs text-slate-400 text-center">¿Tienes una duda que no está aquí? Escríbele a Recursos Humanos.</p>`;
+}
+
+
+async function cargarAyuda() {
+  try { S.ayuda = await api('ayuda', {}, { silencioso: !!S.ayuda }); } catch (e) { S.ayuda = S.ayuda || { manuales: [], categorias: null }; }
+  $('#ay-contenido').innerHTML = ayudaHTML(S.ayuda.manuales, S.ayuda.categorias);
+  iconos();
+}
+
+/** Para el empleado (y desde la pantalla de marcaje): el centro de ayuda en una ventana. */
+async function abrirAyudaModal() {
+  abrirModal({ titulo: 'Ayuda y manuales', ancho: 'sm:max-w-3xl', cuerpo: '<div id="ay-modal"><p class="text-center text-sm text-slate-400 py-10 pulso">Cargando…</p></div>',
+    pie: '<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>' });
+  try { S.ayuda = await api('ayuda', {}, { silencioso: true }); } catch (e) { S.ayuda = S.ayuda || { manuales: [], categorias: null }; }
+  if ($('#ay-modal')) { $('#ay-modal').innerHTML = ayudaHTML(S.ayuda.manuales, S.ayuda.categorias); iconos(); }
+}
+
+function verManual(d) {
+  if (d.url) { window.open(d.url, '_blank', 'noopener'); return; }
+  abrirArchivo('descargarManual', d.id);
+}
+
+function formManual() {
+  abrirModal({
+    titulo: 'Subir documento de ayuda',
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<form id="f-manual" class="space-y-4" onsubmit="return false">
+      <div><label class="etiqueta">Título *</label><input name="titulo" class="campo" required maxlength="120" placeholder="Ej.: Manual de normas internas"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">Categoría</label><select name="categoria" class="campo">${opciones(S.ayuda?.categorias || ['Guías de usuario', 'Procedimientos', 'Normas y políticas', 'Formatos', 'Otros'], 'Procedimientos')}</select></div>
+        <div><label class="etiqueta">¿Quién lo ve?</label><select name="audiencia" class="campo">${opciones([{ v: 'TODOS', t: 'Todo el personal' }, { v: 'GESTION', t: 'Solo RRHH y Dirección' }], 'TODOS')}</select></div>
+      </div>
+      <div><label class="etiqueta">Descripción corta</label><input name="descripcion" class="campo" maxlength="300" placeholder="¿De qué trata? ¿Cuándo usarlo?"></div>
+      <div><label class="etiqueta">Archivo * (PDF recomendado)</label><input name="archivo" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="campo file:mr-3 file:rounded-lg file:border-0 file:bg-marca-50 file:px-3 file:py-1 file:text-marca-700 file:font-semibold"></div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-manual" class="btn-primario"><i data-lucide="upload" class="w-4 h-4"></i>Subir</button>`
+  });
+}
+
+async function guardarManual() {
+  const f = $('#f-manual');
+  if (!f.reportValidity()) return;
+  try {
+    cargando(true, 'Preparando archivo…');
+    let archivo;
+    try { archivo = await archivoParaEnviar(f.archivo.files[0]); } finally { cargando(false); }
+    await api('subirManual', { titulo: f.titulo.value.trim(), categoria: f.categoria.value, audiencia: f.audiencia.value, descripcion: f.descripcion.value.trim(), archivo }, { texto: 'Subiendo documento…' });
+    toast('Documento publicado en Ayuda.', 'ok');
+    cerrarModal(); cargarAyuda();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+async function borrarManual(id) {
+  if (!await confirmar('El documento se quitará de Ayuda y el archivo irá a la papelera de Drive.', { titulo: '¿Eliminar documento?' })) return;
+  try { await api('eliminarManual', { id }, { texto: 'Eliminando…' }); toast('Documento eliminado.', 'ok'); cargarAyuda(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
 /* ======================= 17c. APP INSTALABLE Y COMPARTIR ======================= */
 let eventoInstalar = null;
 const esStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -3352,7 +4187,38 @@ const ACC = {
   'aj-mi-ubicacion': () => ajMiUbicacion(),
   'aj-cierre': () => ajCierre(),
   'aj-respaldo': () => ajRespaldo(),
-  'aj-recalcular': () => ajRecalcular()
+  'aj-recalcular': () => ajRecalcular(),
+  // v3.2
+  'reconocer-depto': d => reconocerDepto(d.depto, d.puntaje),
+  'ver-eval': d => verEvaluacion(d.id),
+  'nueva-tarea': d => formTarea(null, { fecha: d.f || '' }),
+  'ver-tarea': d => { if (S.plan) formTarea(d.id); },
+  'guardar-tarea': () => guardarTareaForm(),
+  'borrar-tarea': d => borrarTarea(d.id),
+  'tarea-mover': d => moverTareaPaso(d.id, d.dir),
+  'mi-tarea': d => cambiarMiTarea(d.id, d.estado),
+  'nuevo-evento': d => formEvento(null, { fecha: d.f || '' }),
+  'ver-evento': d => formEvento(d.id),
+  'guardar-evento': () => guardarEventoForm(),
+  'borrar-evento': d => borrarEvento(d.id),
+  'ag-mes': d => { const [y, m] = S.agMes.split('-').map(Number); const n = new Date(y, m - 1 + Number(d.paso), 1); S.agMes = fechaStr(n).slice(0, 7); pintarAgenda(); },
+  'ag-hoy': () => { S.agMes = hoyStr().slice(0, 7); S.agDia = hoyStr(); pintarAgenda(); },
+  'ag-dia': d => { S.agDia = d.f; pintarAgenda(); },
+  'ag-filtro': d => { S.agFiltros.has(d.k) ? S.agFiltros.delete(d.k) : S.agFiltros.add(d.k); pintarAgenda(); },
+  'nuevo-cv': () => formCurriculum(),
+  'editar-cv': d => formCurriculum(d.id),
+  'guardar-cv': () => guardarCurriculumForm(),
+  'borrar-cv': d => borrarCurriculum(d.id),
+  'ver-cv': d => abrirArchivo('descargarCurriculum', d.id),
+  'contratar-cv': d => contratarCV(d.id),
+  'cv-estrella': d => d.id === 'form' ? estrellaFormulario(d.n) : calificarCV(d.id, d.n),
+  'rg-aplicar': () => cargarRegistro(),
+  'rg-mas': () => cargarRegistro(true),
+  'ayuda-modal': () => abrirAyudaModal(),
+  'ver-manual': d => verManual(d),
+  'subir-manual': () => formManual(),
+  'guardar-manual': () => guardarManual(),
+  'borrar-manual': d => borrarManual(d.id)
 };
 
 function prepararUI() {
@@ -3387,6 +4253,14 @@ function prepararUI() {
   $('#ev-buscar').addEventListener('input', () => { clearTimeout(t3); t3 = setTimeout(pintarEvaluaciones, 200); });
   ['#ev-depto', '#ev-periodo'].forEach(s => $(s).addEventListener('change', pintarEvaluaciones));
   $('#sol-todas').addEventListener('change', pintarSolicitudes);
+  let t4, t5;
+  $('#ta-buscar').addEventListener('input', () => { clearTimeout(t4); t4 = setTimeout(pintarTareas, 200); });
+  ['#ta-resp', '#ta-prio', '#ta-vencidas'].forEach(x => $(x).addEventListener('change', pintarTareas));
+  $('#cv-buscar').addEventListener('input', () => { clearTimeout(t5); t5 = setTimeout(pintarCurriculums, 200); });
+  ['#cv-estado', '#cv-estrellas', '#cv-depto'].forEach(x => $(x).addEventListener('change', pintarCurriculums));
+  $('#rg-buscar').addEventListener('keydown', ev => { if (ev.key === 'Enter') cargarRegistro(); });
+  ['#rg-usuario', '#rg-categoria', '#rg-desde', '#rg-hasta'].forEach(x => $(x).addEventListener('change', () => cargarRegistro()));
+  prepararTablero();
   window.addEventListener('hashchange', () => { if (S.sesion) entrarSegunRuta(); });
   document.addEventListener('visibilitychange', alVolverALaApp);
   $('#dash-mes-sel').innerHTML = selectorMesHTML('dash-mes-periodo', rangoPreset('mes_ant')[0].slice(0, 7));

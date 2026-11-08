@@ -8,7 +8,7 @@
  * - Imágenes y sonido propios: copia guardada.
  * - La API de Google (script.google.com) y el inicio de sesión NUNCA se guardan.
  */
-const VERSION_SW = 'asistencia-sumanpek-3.1.0';
+const VERSION_SW = 'asistencia-sumanpek-3.2.0';
 const BASICOS = ['./', 'index.html', 'logo.png', 'icono-192.png', 'icono-512.png', 'manifest.webmanifest'];
 const CDN = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 const NUNCA = ['script.google.com', 'script.googleusercontent.com', 'accounts.google.com', 'oauth2.googleapis.com'];
