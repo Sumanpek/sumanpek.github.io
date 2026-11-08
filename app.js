@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.2.0 — Fase 3)
+ *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.3.0 — Fase 3)
  *  © 2026 Anabel Martínez RRHH — Todos los derechos de creación reservados.
  *  Solución personalizada para Sumanpek, C.A.
  * ==========================================================================
@@ -15,7 +15,7 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '3.2.0';
+const VERSION = '3.3.0';
 const APP_NOMBRE = 'Asistencia Sumanpek, C.A.';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -203,6 +203,29 @@ function decodificarJWT(t) {
 const tokenVigente = t => { const p = decodificarJWT(t); return !!(p && p.exp * 1000 - Date.now() > 120000); };
 
 /* ========================= 4. INTERFAZ BÁSICA ========================= */
+/** Igual que en el servidor: "mikkel peña DE la rosa" → "Mikkel Peña de la Rosa". */
+function capitalizarNombre(t) {
+  const menores = ['de', 'del', 'la', 'las', 'los', 'y', 'e'];
+  return String(t || '').replace(/\s+/g, ' ').trimStart().toLowerCase().split(' ').map((p, i) =>
+    i > 0 && menores.includes(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+/** Cargos: "diseñador gráfico" → "Diseñador Gráfico", respetando siglas ("analista de RRHH", "P.O.P."). */
+const SIGLAS_CARGO = ['RRHH', 'RR.HH.', 'TI', 'IT', 'CEO', 'POP', 'P.O.P.', 'CNC', 'UV', 'DTF', 'SST', 'QA', 'HR', 'CMYK', 'RIF', 'SENIAT', 'IVSS'];
+function capitalizarCargo(t) {
+  const texto = String(t || '').trim().replace(/\s+/g, ' ');
+  if (!texto) return '';
+  const todoMayus = texto === texto.toUpperCase();
+  const menores = ['de', 'del', 'la', 'las', 'los', 'el', 'y', 'e', 'o', 'u', 'en', 'a', 'al', 'para', 'con', 'por'];
+  return texto.split(' ').map((p, i) => {
+    if (SIGLAS_CARGO.includes(p.toUpperCase())) return p.toUpperCase();
+    if (/^([A-Za-zÁÉÍÓÚÑ]\.){2,}$/.test(p)) return p.toUpperCase();
+    if (!todoMayus && /^[A-ZÁÉÍÓÚÑ]{2,5}$/.test(p)) return p;
+    const m = p.toLowerCase();
+    if (i > 0 && menores.includes(m)) return m;
+    return m.replace(/[a-záéíóúñü]/, c => c.toUpperCase());
+  }).join(' ');
+}
+
 function toast(msg, tipo = 'info', ms = 4500) {
   const estilos = {
     ok: ['bg-emerald-600', 'circle-check'], error: ['bg-rose-600', 'circle-x'],
@@ -246,6 +269,7 @@ function cerrarModal() {
   document.body.style.overflow = '';
   S.modalVolver = null;
   S.exp = null;
+  S.grupoAbierto = null;
 }
 
 function cancelarModal() {
@@ -328,7 +352,7 @@ function barra(delta) {
 /** Acciones de solo lectura: se permiten aunque las versiones no coincidan. */
 const LECTURAS = new Set(['sesion', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
   'descargarDocumento', 'descargarSoporte', 'estadoAcceso', 'misPermisos', 'ajustes',
-  'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria']);
+  'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria', 'misNotificaciones', 'pushConfig']);
 
 async function api(action, payload = {}, { silencioso = false, texto = 'Cargando…' } = {}) {
   if (S.versionDesigual && !LECTURAS.has(action)) {
@@ -437,6 +461,9 @@ async function cargarSesion() {
     S.sesionT = Date.now();
     if (verificarVersion()) return;
     entrarSegunRuta();
+    actualizarCampana(S.sesion.notifNoLeidas || 0);
+    celebrarAlAbrir();
+    sincronizarPush();
     if (esGestion() && !S.store) asegurarStore().catch(() => {});   // precarga del panel en segundo plano
   } catch (e) {
     if (e.codigo === 'NO_REGISTRADO') return mostrarAcceso();
@@ -509,6 +536,8 @@ async function alVolverALaApp() {
     const s = await api('sesion', {}, { silencioso: true });
     S.sesion = s; S.sesionT = Date.now();
     if (verificarVersion()) return;
+    actualizarCampana(s.notifNoLeidas || 0);
+    celebrarAlAbrir();
     if (!$('#v-marcaje').classList.contains('hidden')) mostrarMarcaje();
     else if (!$('#v-admin').classList.contains('hidden')) { invalidarCache(); refrescarFondo(); }
   } catch (e) { /* se reintenta la próxima vez */ }
@@ -613,6 +642,7 @@ function mostrarMarcaje() {
   cargarMisSolicitudes();
   cargarMisPermisos();
   cargarMiAgenda();
+  pintarAvisoNotificaciones();
   if (s.empleadoId) verificarUbicacion(true);
   iconos();
 }
@@ -671,43 +701,86 @@ function pintarCumple() {
   }
   el.innerHTML = html;
   el.className = html ? 'space-y-3' : 'hidden';
-  let celebrado = false;
-  try { celebrado = sessionStorage.getItem('aa_cumple') === s.hoy; sessionStorage.setItem('aa_cumple', s.hoy); } catch (e) { /* nada */ }
-  if (s.cumpleanos && !celebrado) setTimeout(() => celebrar(), 700);
 }
 
-/** Confeti + "Happy Birthday" (MP3). Si el navegador bloquea el sonido automático, se pide un toque. */
+/**
+ * v3.3: si hoy es tu cumpleaños, la celebración arranca sola cada vez que abres la app
+ * (y también al volver a ella después de 15 minutos). El botón "¡Celebrar!" la repite cuando quieras.
+ */
+const DURACION_FIESTA = 17000;   // la canción dura ~15 s: el confeti dura 17 s por si el audio arranca con retraso
+function celebrarAlAbrir() {
+  const s = S.sesion;
+  if (!s || !s.cumpleanos || S.cumpleCelebrado) return;
+  S.cumpleCelebrado = true;
+  setTimeout(() => {
+    celebrar();
+    if ($('#v-marcaje').classList.contains('hidden')) toast(`🎂 ¡Feliz cumpleaños, ${String(s.nombre).split(' ')[0]}! Todo el equipo de Sumanpek te desea un gran día.`, 'ok', 8000);
+  }, 600);
+}
+
+/** Confeti + "Happy Birthday" (MP3, archivo original). */
 function celebrar() {
-  lanzarConfeti();
+  lanzarConfeti(DURACION_FIESTA);
   try {
-    if (S.musica) { S.musica.pause(); S.musica.currentTime = 0; }
     S.musica = S.musica || new Audio('cumpleanos.mp3');
-    S.musica.volume = 0.9;
-    S.musica.play().then(() => $('#btn-celebrar')?.classList.remove('animate-bounce')).catch(err => {
-      if (err && err.name === 'NotAllowedError') {
-        const b = $('#btn-celebrar');
-        if (b) { b.textContent = '🔊 Toca para escuchar tu canción'; b.classList.add('animate-bounce'); }
-      } else fanfarria();   // si el archivo no carga, suena la fanfarria sintetizada
+    S.musica.pause(); S.musica.currentTime = 0; S.musica.volume = 0.9;
+    S.musica.play().then(() => quitarAvisoSonido()).catch(err => {
+      if (err && err.name === 'NotAllowedError') esperarToqueParaSonar();
+      else fanfarria();   // si el archivo no carga, suena la fanfarria sintetizada
     });
   } catch (e) { fanfarria(); }
 }
 
+/**
+ * Los navegadores no dejan sonar música hasta que la persona toca la pantalla.
+ * La animación ya arrancó; al primer toque (en cualquier parte) suena la canción y el confeti vuelve a empezar, sincronizado.
+ */
+function esperarToqueParaSonar() {
+  if (S.esperandoToque) return;
+  S.esperandoToque = true;
+  const pill = document.createElement('button');
+  pill.id = 'aviso-sonido';
+  pill.className = 'fixed bottom-5 z-[96] btn bg-marca-700 text-white shadow-2xl px-5 py-3 rounded-full animate-bounce';
+  pill.style.cssText = 'left:0;right:0;margin:0 auto;width:max-content;max-width:calc(100% - 24px);white-space:nowrap';
+  pill.innerHTML = '🔊 Toca para escuchar tu canción';
+  document.body.appendChild(pill);
+  const tipos = ['pointerdown', 'keydown', 'touchend'];
+  const desbloquear = () => {
+    tipos.forEach(t => document.removeEventListener(t, desbloquear, true));
+    S.esperandoToque = false;
+    quitarAvisoSonido();
+    try {
+      S.musica.currentTime = 0;
+      S.musica.play().then(() => lanzarConfeti(DURACION_FIESTA)).catch(() => fanfarria());
+    } catch (e) { fanfarria(); }
+  };
+  tipos.forEach(t => document.addEventListener(t, desbloquear, true));
+}
+function quitarAvisoSonido() { $('#aviso-sonido')?.remove(); }
+
+/** Confeti que sigue cayendo durante "ms" milisegundos (las piezas que salen por abajo vuelven a caer desde arriba). */
 function lanzarConfeti(ms = 4500) {
   const cv = $('#confeti'), ctx = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
   const W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr;
   const colores = [COLORES.marca, COLORES.navy, COLORES.oro, '#e66aa3', '#5468c4'];
-  const ps = Array.from({ length: 170 }, (_, i) => ({
-    x: Math.random() * W, y: -Math.random() * H * 0.6, w: (6 + Math.random() * 7) * dpr, h: (9 + Math.random() * 9) * dpr,
+  const nueva = (p, i, arriba) => Object.assign(p || {}, {
+    x: Math.random() * W, y: arriba ? -20 * dpr - Math.random() * H * 0.3 : -Math.random() * H * 0.6, w: (6 + Math.random() * 7) * dpr, h: (9 + Math.random() * 9) * dpr,
     vx: (Math.random() - 0.5) * 3 * dpr, vy: (2 + Math.random() * 3) * dpr, r: Math.random() * 6.3, vr: (Math.random() - 0.5) * 0.3, c: colores[i % colores.length]
-  }));
-  const t0 = performance.now();
+  });
+  const ps = Array.from({ length: 170 }, (_, i) => nueva(null, i, false));
+  const id = S.confetiId = (S.confetiId || 0) + 1;   // si se lanza otro, este se detiene
+  const t0 = performance.now(), reciclarHasta = Math.max(0, ms - 3500);
   (function paso(t) {
+    if (S.confetiId !== id) return;
     ctx.clearRect(0, 0, W, H);
-    ps.forEach(p => {
-      p.x += p.vx; p.y += p.vy; p.vy += 0.04 * dpr; p.r += p.vr;
+    let vivas = 0;
+    ps.forEach((p, i) => {
+      p.x += p.vx; p.y += p.vy; p.vy = Math.min(p.vy + 0.04 * dpr, 7 * dpr); p.r += p.vr;
+      if (p.y > H + 30 * dpr && t - t0 < reciclarHasta) nueva(p, i, true);
+      if (p.y <= H + 30 * dpr) vivas++;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.r))); ctx.restore();
     });
-    if (t - t0 < ms) requestAnimationFrame(paso); else ctx.clearRect(0, 0, W, H);
+    if (t - t0 < ms && vivas) requestAnimationFrame(paso); else ctx.clearRect(0, 0, W, H);
   })(t0);
 }
 
@@ -995,6 +1068,7 @@ function mostrarAdmin() {
   actualizarInsignia(s.solicitudesPendientes || 0);
   actualizarInsignia(s.accesosPendientes || 0, 'empleados');
   actualizarInsignia(s.permisosPendientes || 0, 'permisos');
+  actualizarInsignia(s.tareasPorAprobar || 0, 'tareas');
   navegar(S.seccion === 'mi-marcaje' ? 'dashboard' : S.seccion);
 }
 
@@ -1009,9 +1083,9 @@ function pintarSelectoresDepto() {
 
 function construirNavegacion() {
   $('#nav-lateral').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${['asistencia', 'empleados', 'permisos'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${['asistencia', 'empleados', 'permisos', 'tareas'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
   $('#nav-movil-items').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${['asistencia', 'empleados', 'permisos'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${['asistencia', 'empleados', 'permisos', 'tareas'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
 }
 
 function actualizarInsignia(n, sec = 'asistencia') {
@@ -3381,11 +3455,18 @@ function verEvaluacion(id) {
 }
 
 /* ======================= 17k. TAREAS (KANBAN) ======================= */
+// Los valores internos no cambian (compatibles con lo ya guardado); en pantalla se usan nombres más claros.
 const COLS_TAREA = [
-  { e: 'Pendiente', c: '#94a3b8', i: 'circle-dashed' }, { e: 'En progreso', c: '#0ea5e9', i: 'loader' },
-  { e: 'En revisión', c: '#f59e0b', i: 'eye' }, { e: 'Hecho', c: '#10b981', i: 'circle-check' }
+  { e: 'Pendiente', t: 'Pendiente', c: '#94a3b8', i: 'circle-dashed' }, { e: 'En progreso', t: 'En curso', c: '#0ea5e9', i: 'loader' },
+  { e: 'En revisión', t: 'Esperando aprobación', c: '#f59e0b', i: 'hourglass' }, { e: 'Hecho', t: 'Terminada', c: '#10b981', i: 'circle-check' }
 ];
+const ETQ_TAREA = { 'Pendiente': 'Pendiente', 'En progreso': 'En curso', 'En revisión': 'Esperando aprobación', 'Hecho': 'Terminada',
+  'Por aprobar': 'Por aprobar', 'Rechazada': 'No aprobada' };
+const etqTarea = e => ETQ_TAREA[e] || e;
 const ESTILO_PRIO = { Urgente: 'bg-rose-100 text-rose-700', Alta: 'bg-amber-100 text-amber-700', Media: 'bg-sky-100 text-sky-700', Baja: 'bg-slate-100 text-slate-600' };
+const enTablero = t => COLS_TAREA.some(c => c.e === t.Estado);
+const deGrupo = g => (S.plan?.tareas || []).filter(t => t.Grupo === g);
+const nombreGrupo = t => String(t.Grupo).startsWith('GD-') ? `Equipo de ${t.Departamento}` : 'Todo el personal';
 
 async function cargarPlan(forzar = false) {
   if (S.plan && !forzar && Date.now() - S.plan.t < 60000) return S.plan;
@@ -3394,17 +3475,21 @@ async function cargarPlan(forzar = false) {
   return S.plan;
 }
 
-async function cargarTareas() {
-  try { await asegurarCatalogo(); await cargarPlan(); } catch (e) { return toast(e.message, 'error'); }
+async function cargarTareas(forzar = false) {
+  try { await asegurarCatalogo(); await cargarPlan(forzar); } catch (e) { return toast(e.message, 'error'); }
   const sel = $('#ta-resp'), v = sel.value;
   sel.innerHTML = `<option value="">Todos los responsables</option><option value="__sin">Sin asignar</option>` +
     opciones(S.empleados.filter(e => e.Estado !== 'Inactivo').sort(ordenarNombre).map(e => ({ v: e.ID, t: nombreCompleto(e) })));
   sel.value = v;
+  const dep = $('#ta-depto'), vd = dep.value;
+  dep.innerHTML = opciones(S.sesion.departamentos || [], '', 'Todos los departamentos');
+  dep.value = vd;
+  actualizarInsignia((S.plan.tareas || []).filter(t => t.Estado === 'Por aprobar').length, 'tareas');
   pintarTareas();
 }
 
 function estadoVencimiento(t) {
-  if (!t.FechaLimite || t.Estado === 'Hecho') return '';
+  if (!t.FechaLimite || t.Estado === 'Hecho' || t.Estado === 'Rechazada') return '';
   const hoy = hoyStr();
   if (t.FechaLimite < hoy) return 'vencida';
   if (t.FechaLimite <= sumarDias(hoy, 2)) return 'pronto';
@@ -3420,10 +3505,15 @@ function chipFecha(t) {
 
 function filtrarTareas() {
   const q = normalizar($('#ta-buscar').value.trim()), resp = $('#ta-resp').value, prio = $('#ta-prio').value, venc = $('#ta-vencidas').checked;
+  const dep = $('#ta-depto').value, origen = $('#ta-origen').value;
   const finSemana = sumarDias(hoyStr(), 7 - diaSemana(hoyStr()));
   return (S.plan?.tareas || []).filter(t => {
     if (resp === '__sin' ? t.ResponsableID : resp && t.ResponsableID !== resp) return false;
     if (prio && t.Prioridad !== prio) return false;
+    if (dep && t.Departamento !== dep) return false;
+    if (origen === 'EMPLEADO' && t.Origen !== 'EMPLEADO') return false;
+    if (origen === 'RRHH' && t.Origen === 'EMPLEADO') return false;
+    if (origen === 'GRUPO' && !t.Grupo) return false;
     if (venc && !(t.FechaLimite && t.FechaLimite <= finSemana && t.Estado !== 'Hecho')) return false;
     if (q && !normalizar([t.Titulo, t.Descripcion, t.Etiquetas, nombreCompleto(empPorId(t.ResponsableID)), t.Departamento].join(' ')).includes(q)) return false;
     return true;
@@ -3439,37 +3529,99 @@ function tarjetaTarea(t) {
       <span class="insignia shrink-0 ${ESTILO_PRIO[t.Prioridad] || ''}">${esc(t.Prioridad)}</span>
     </div>
     ${t.Descripcion ? `<p class="text-xs text-slate-500 mt-1 line-clamp-2">${esc(t.Descripcion)}</p>` : ''}
-    ${t.Etiquetas ? `<div class="flex flex-wrap gap-1 mt-2">${t.Etiquetas.split(',').map(x => `<span class="rounded-md bg-navy-50 text-navy-700 px-1.5 py-0.5 text-[10px] font-semibold">#${esc(x.trim())}</span>`).join('')}</div>` : ''}
+    <div class="flex flex-wrap gap-1 mt-2">${t.Origen === 'EMPLEADO' ? '<span class="rounded-md bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[10px] font-semibold">Propuesta del empleado</span>' : ''}${t.Grupo ? `<span class="rounded-md bg-oro-100 text-oro-800 px-1.5 py-0.5 text-[10px] font-semibold">👥 ${esc(nombreGrupo(t))}</span>` : ''}${t.Etiquetas ? t.Etiquetas.split(',').map(x => `<span class="rounded-md bg-navy-50 text-navy-700 px-1.5 py-0.5 text-[10px] font-semibold">#${esc(x.trim())}</span>`).join('') : ''}</div>
     <div class="flex items-center justify-between gap-2 mt-3">
       <div class="flex items-center gap-1.5 min-w-0">${e ? `${avatarHTML(e.FotoMini, nombreCompleto(e), 'h-6 w-6 text-[9px]')}<span class="text-xs text-slate-600 truncate">${esc(String(e.Nombres).split(' ')[0])}</span>` : '<span class="text-xs text-slate-400">Sin asignar</span>'}</div>
       <div class="flex items-center gap-1">${chipFecha(t)}</div>
     </div>
     ${rr ? `<div class="flex justify-between mt-2 md:hidden">
-      <button data-acc="tarea-mover" data-id="${esc(t.ID)}" data-dir="-1" class="btn-fantasma btn-sm ${i === 0 ? 'invisible' : ''}"><i data-lucide="arrow-left" class="w-4 h-4"></i>${i > 0 ? esc(COLS_TAREA[i - 1].e) : ''}</button>
-      <button data-acc="tarea-mover" data-id="${esc(t.ID)}" data-dir="1" class="btn-fantasma btn-sm ${i === COLS_TAREA.length - 1 ? 'invisible' : ''}">${i < COLS_TAREA.length - 1 ? esc(COLS_TAREA[i + 1].e) : ''}<i data-lucide="arrow-right" class="w-4 h-4"></i></button></div>` : ''}
+      <button data-acc="tarea-mover" data-id="${esc(t.ID)}" data-dir="-1" class="btn-fantasma btn-sm ${i === 0 ? 'invisible' : ''}"><i data-lucide="arrow-left" class="w-4 h-4"></i>${i > 0 ? esc(COLS_TAREA[i - 1].t) : ''}</button>
+      <button data-acc="tarea-mover" data-id="${esc(t.ID)}" data-dir="1" class="btn-fantasma btn-sm ${i === COLS_TAREA.length - 1 ? 'invisible' : ''}">${i < COLS_TAREA.length - 1 ? esc(COLS_TAREA[i + 1].t) : ''}<i data-lucide="arrow-right" class="w-4 h-4"></i></button></div>` : ''}
   </div>`;
+}
+
+/** Una tarjeta por grupo en cada columna: muestra cuántas personas del grupo están en ese paso. */
+function tarjetaGrupo(grupo, aqui, col) {
+  const todos = deGrupo(grupo), t = aqui[0];
+  const hechas = todos.filter(x => x.Estado === 'Hecho').length;
+  const pct = todos.length ? Math.round(hechas / todos.length * 100) : 0;
+  const emps = aqui.map(x => empPorId(x.ResponsableID)).filter(Boolean);
+  return `<div class="kb-tarjeta tarjeta p-3 border-l-4 cursor-pointer" style="border-left-color:${col.c}" draggable="false" data-grupo="${esc(grupo)}" data-acc="ver-grupo">
+    <div class="flex items-start justify-between gap-2">
+      <p class="font-semibold text-sm text-slate-800 leading-snug">${esc(t.Titulo)}</p>
+      <span class="insignia shrink-0 ${ESTILO_PRIO[t.Prioridad] || ''}">${esc(t.Prioridad)}</span>
+    </div>
+    <p class="text-xs text-slate-500 mt-1">👥 ${esc(nombreGrupo(t))} · <b class="text-slate-700">${aqui.length} de ${todos.length}</b> ${aqui.length === 1 ? 'persona' : 'personas'} en este paso</p>
+    <div class="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden" title="${hechas} de ${todos.length} terminadas"><div class="h-full bg-emerald-500" style="width:${pct}%"></div></div>
+    <div class="flex items-center justify-between gap-2 mt-2.5">
+      <div class="flex -space-x-1.5">${emps.slice(0, 5).map(e => `<span class="ring-2 ring-white rounded-full">${avatarHTML(e.FotoMini, nombreCompleto(e), 'h-6 w-6 text-[9px]')}</span>`).join('')}${emps.length > 5 ? `<span class="h-6 w-6 rounded-full bg-slate-200 text-slate-600 text-[9px] font-bold flex items-center justify-center ring-2 ring-white">+${emps.length - 5}</span>` : ''}</div>
+      <div class="flex items-center gap-1"><span class="text-[10px] text-slate-400">${hechas}/${todos.length} ✓</span>${chipFecha(t)}</div>
+    </div>
+  </div>`;
+}
+
+function tarjetasColumna(ts, col) {
+  if (!$('#ta-agrupar').checked) return ts.map(tarjetaTarea).join('');
+  const vistos = new Set(), out = [];
+  ts.forEach(t => {
+    if (!t.Grupo) return out.push(tarjetaTarea(t));
+    if (vistos.has(t.Grupo)) return;
+    vistos.add(t.Grupo);
+    out.push(tarjetaGrupo(t.Grupo, ts.filter(x => x.Grupo === t.Grupo), col));
+  });
+  return out.join('');
+}
+
+/** Franja superior: actividades que los empleados registraron y esperan aprobación de RRHH. */
+function pintarPropuestas(lista) {
+  const cont = $('#ta-propuestas');
+  if (!lista.length) { cont.classList.add('hidden'); cont.innerHTML = ''; return; }
+  const rr = esRRHH();
+  cont.classList.remove('hidden');
+  cont.innerHTML = `<div class="tarjeta overflow-hidden border-violet-200">
+    <div class="px-5 py-3 bg-violet-50 border-b border-violet-100 flex items-center justify-between gap-2">
+      <p class="font-bold text-sm text-violet-800 flex items-center gap-2"><i data-lucide="inbox" class="w-4 h-4"></i>Actividades propuestas por empleados · por aprobar</p>
+      <span class="insignia bg-violet-600 text-white">${lista.length}</span></div>
+    <div class="divide-y divide-slate-100">${lista.sort((a, b) => String(a.Creado).localeCompare(String(b.Creado))).map(t => {
+      const e = empPorId(t.ResponsableID);
+      return `<div class="px-5 py-3 flex flex-wrap items-center gap-3">
+        ${e ? avatarHTML(e.FotoMini, nombreCompleto(e), 'h-9 w-9 text-xs') : ''}
+        <button data-acc="ver-tarea" data-id="${esc(t.ID)}" class="flex-1 min-w-[200px] text-left">
+          <p class="text-sm font-semibold text-slate-800">${esc(t.Titulo)} <span class="insignia ${ESTILO_PRIO[t.Prioridad] || ''}">${esc(t.Prioridad)}</span></p>
+          <p class="text-xs text-slate-500">${esc(e ? nombreCompleto(e) : '—')} · ${esc(t.Departamento || '')}${t.FechaLimite ? ' · para el ' + esc(fmtFechaCorta(t.FechaLimite)) : ''} · enviada ${esc(String(t.Creado).slice(0, 16))}</p>
+          ${t.Descripcion ? `<p class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(t.Descripcion)}</p>` : ''}</button>
+        ${rr ? `<div class="flex gap-2 shrink-0"><button data-acc="no-aprobar-tarea" data-id="${esc(t.ID)}" class="btn-sec btn-sm text-rose-600"><i data-lucide="x" class="w-4 h-4"></i>No aprobar</button>
+          <button data-acc="aprobar-tarea" data-id="${esc(t.ID)}" class="btn btn-sm bg-emerald-600 text-white hover:bg-emerald-700"><i data-lucide="check" class="w-4 h-4"></i>Aprobar</button></div>` : ''}
+      </div>`;
+    }).join('')}</div></div>`;
 }
 
 function pintarTareas() {
   if (!S.plan) return;
   const lista = filtrarTareas();
+  pintarPropuestas(lista.filter(t => t.Estado === 'Por aprobar'));
+  const tablero = lista.filter(enTablero);
   $('#ta-tablero').innerHTML = COLS_TAREA.map(c => {
-    const ts = lista.filter(t => t.Estado === c.e).sort((a, b) => num(a.Orden) - num(b.Orden));
+    const ts = tablero.filter(t => t.Estado === c.e).sort((a, b) => num(a.Orden) - num(b.Orden));
     return `<div class="rounded-2xl bg-slate-100 p-3">
       <div class="flex items-center justify-between px-1 mb-3">
-        <p class="flex items-center gap-2 font-bold text-sm text-slate-700"><span class="h-2.5 w-2.5 rounded-full" style="background:${c.c}"></span>${c.e}</p>
+        <p class="flex items-center gap-2 font-bold text-sm text-slate-700"><span class="h-2.5 w-2.5 rounded-full" style="background:${c.c}"></span>${c.t}</p>
         <span class="insignia bg-white text-slate-600">${ts.length}</span>
       </div>
-      <div class="kb-col space-y-2.5 rounded-xl" data-estado="${c.e}">${ts.map(tarjetaTarea).join('') || '<p class="py-6 text-center text-xs text-slate-400">Sin tareas</p>'}</div>
+      <div class="kb-col space-y-2.5 rounded-xl" data-estado="${c.e}">${tarjetasColumna(ts, c) || '<p class="py-6 text-center text-xs text-slate-400">Sin tareas</p>'}</div>
       ${c.e === 'Pendiente' ? '<button data-acc="nueva-tarea" class="solo-rrhh btn-fantasma btn-sm w-full mt-2"><i data-lucide="plus" class="w-4 h-4"></i>Agregar tarea</button>' : ''}
     </div>`;
   }).join('');
   renderTabla('ta-tabla', 't-tareas', [
     { t: 'Tarea', v: t => esc(t.Titulo), c: t => t.Titulo }, { t: 'Descripción', v: t => esc(t.Descripcion), c: t => t.Descripcion },
-    { t: 'Estado', v: t => esc(t.Estado), c: t => t.Estado }, { t: 'Prioridad', v: t => esc(t.Prioridad), c: t => t.Prioridad },
+    { t: 'Estado', v: t => esc(etqTarea(t.Estado)), c: t => etqTarea(t.Estado) }, { t: 'Prioridad', v: t => esc(t.Prioridad), c: t => t.Prioridad },
     { t: 'Responsable', v: t => esc(nombreCompleto(empPorId(t.ResponsableID))), c: t => t.ResponsableID ? nombreCompleto(empPorId(t.ResponsableID)) : '' },
     { t: 'Departamento', v: t => esc(t.Departamento), c: t => t.Departamento }, { t: 'Fecha límite', v: t => esc(t.FechaLimite), c: t => t.FechaLimite },
-    { t: 'Etiquetas', v: t => esc(t.Etiquetas), c: t => t.Etiquetas }, { t: 'Creada', v: t => esc(t.Creado), c: t => t.Creado }, { t: 'Completada', v: t => esc(t.Completado), c: t => t.Completado }
+    { t: 'Origen', v: t => esc(t.Origen === 'EMPLEADO' ? 'Propuesta del empleado' : 'RRHH'), c: t => t.Origen === 'EMPLEADO' ? 'Propuesta del empleado' : 'RRHH' },
+    { t: 'Grupo', v: t => esc(t.Grupo ? nombreGrupo(t) : ''), c: t => t.Grupo ? nombreGrupo(t) + ' (' + t.Grupo + ')' : '' },
+    { t: 'Etiquetas', v: t => esc(t.Etiquetas), c: t => t.Etiquetas }, { t: 'Creada', v: t => esc(t.Creado), c: t => t.Creado },
+    { t: 'Completada', v: t => esc(t.Completado), c: t => t.Completado }, { t: 'Motivo (no aprobada)', v: t => esc(t.MotivoRechazo), c: t => t.MotivoRechazo || '' },
+    { t: 'Historial', v: () => '', c: t => leerHistorial(t).map(h => `${h[0]} ${etqTarea(h[1])} (${h[2]})${h[3] ? ' ' + h[3] : ''}`).join(' | ') }
   ], lista);
   iconos();
 }
@@ -3480,7 +3632,7 @@ function prepararTablero() {
   let arrastrada = null;
   tab.addEventListener('dragstart', ev => {
     const c = ev.target.closest('.kb-tarjeta');
-    if (!c || !esRRHH()) return ev.preventDefault();
+    if (!c || !c.dataset.id || !esRRHH()) return ev.preventDefault();
     arrastrada = c.dataset.id;
     c.classList.add('arrastrando');
     ev.dataTransfer.effectAllowed = 'move';
@@ -3500,7 +3652,7 @@ function prepararTablero() {
     ev.preventDefault();
     col.classList.remove('sobre');
     const estado = col.dataset.estado;
-    const otras = $$('.kb-tarjeta', col).filter(c => c.dataset.id !== arrastrada);
+    const otras = $$('.kb-tarjeta[data-id]', col).filter(c => c.dataset.id !== arrastrada);
     const desp = otras.findIndex(c => { const r = c.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
     const ord = id => num((S.plan.tareas.find(t => t.ID === id) || {}).Orden);
     let orden;
@@ -3522,8 +3674,9 @@ async function moverTareaA(id, estado, orden) {
   try {
     const r = await api('moverTarea', { id, estado, orden }, { silencioso: true });
     Object.assign(t, r);
-    if (estado === 'Hecho' && antes.Estado !== 'Hecho') toast('¡Tarea completada! ✅', 'ok');
+    if (estado === 'Hecho' && antes.Estado !== 'Hecho') toast('¡Tarea terminada! ✅', 'ok');
     pintarTareas();
+    if (S.grupoAbierto) verGrupo(S.grupoAbierto);
   } catch (e) { Object.assign(t, antes); pintarTareas(); toast(e.message, 'error'); }
 }
 
@@ -3533,58 +3686,219 @@ function moverTareaPaso(id, dir) {
   if (i >= 0 && i < COLS_TAREA.length) moverTareaA(id, COLS_TAREA[i].e);
 }
 
-function formTarea(id = null, { estado = 'Pendiente', fecha = '' } = {}) {
+function leerHistorial(t) {
+  try { const h = JSON.parse(t.Historial || '[]'); return Array.isArray(h) ? h : []; } catch (e) { return []; }
+}
+
+/** Línea de tiempo de la tarea: cada cambio de estado con fecha y quién lo hizo. */
+function historialHTML(t) {
+  const h = leerHistorial(t);
+  if (!h.length) return '';
+  const quien = email => { const e = S.empleados.find(x => String(x.Email).toLowerCase() === String(email).toLowerCase()); return e ? nombreCompleto(e) : email; };
+  const color = e => (COLS_TAREA.find(c => c.e === e) || { c: e === 'Rechazada' ? '#e11d48' : '#7c3aed' }).c;
+  return `<details class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" ${h.length <= 4 ? 'open' : ''}>
+    <summary class="cursor-pointer text-sm font-semibold text-slate-700">Historial de movimientos (${h.length})</summary>
+    <ol class="mt-3 space-y-2">${h.slice().reverse().map(x => `<li class="flex gap-2.5 text-xs">
+      <span class="mt-1 h-2.5 w-2.5 rounded-full shrink-0" style="background:${color(x[1])}"></span>
+      <span><b class="text-slate-700">${esc(etqTarea(x[1]))}</b> · ${esc(quien(x[2]))}<br><span class="text-slate-400">${esc(String(x[0]).slice(0, 16))}${x[3] ? ' · ' + esc(x[3]) : ''}</span></span></li>`).join('')}</ol>
+  </details>`;
+}
+
+function formTarea(id = null, { estado = 'Pendiente', fecha = '', grupo = false } = {}) {
   const t = id ? S.plan.tareas.find(x => x.ID === id) : { Estado: estado, Prioridad: 'Media', FechaLimite: fecha };
   if (!t) return toast('Tarea no encontrada.', 'error');
-  const rr = esRRHH(), dis = rr ? '' : 'disabled';
+  const rr = esRRHH(), propuesta = ['Por aprobar', 'Rechazada'].includes(t.Estado);
+  const dis = rr && !propuesta ? '' : 'disabled';
   const activos = S.empleados.filter(e => e.Estado !== 'Inactivo' || e.ID === t.ResponsableID).sort(ordenarNombre);
+  const deps = S.sesion.departamentos || [];
+  const tamGrupo = t.Grupo ? deGrupo(t.Grupo).length : 0;
+  const nuevo = !t.ID;
+  const asignacion = nuevo ? `<div><label class="etiqueta">Asignar a</label>
+      <div class="grid grid-cols-3 gap-2" id="ft-modo">
+        ${[['PERSONA', 'user', 'Una persona'], ['DEPARTAMENTO', 'users', 'Un departamento'], ['TODOS', 'building-2', 'Todo el personal']].map(([v, i, txt], k) => `
+        <label class="flex flex-col items-center gap-1 rounded-xl border-2 border-slate-200 px-2 py-2.5 text-xs font-semibold text-slate-600 cursor-pointer opcion-radio">
+          <input type="radio" name="asignarA" value="${v}" class="sr-only" ${k === 0 ? 'checked' : ''}><i data-lucide="${i}" class="w-5 h-5"></i>${txt}</label>`).join('')}
+      </div></div>` : '';
   abrirModal({
-    titulo: id ? (rr ? 'Editar tarea' : 'Tarea') : 'Nueva tarea',
+    titulo: nuevo ? 'Nueva tarea' : propuesta ? 'Actividad propuesta por el empleado' : rr ? 'Editar tarea' : 'Tarea',
     ancho: 'sm:max-w-xl',
+    volver: grupo && t.Grupo ? () => verGrupo(t.Grupo) : null,
     cuerpo: `<form id="f-tarea" class="space-y-4" onsubmit="return false">
       <input type="hidden" name="ID" value="${esc(t.ID || '')}">
+      ${propuesta ? `<div class="rounded-xl ${t.Estado === 'Rechazada' ? 'bg-rose-50 text-rose-700' : 'bg-violet-50 text-violet-800'} px-4 py-3 text-sm">
+        ${t.Estado === 'Rechazada' ? `<b>No aprobada.</b> ${esc(t.MotivoRechazo || '')}` : `<b>${esc(nombreCompleto(empPorId(t.ResponsableID)))}</b> registró esta actividad y espera tu aprobación. Al aprobarla, entra al tablero en "Pendiente" y se le avisa por correo y notificación.`}</div>` : ''}
+      ${t.Grupo ? `<div class="rounded-xl bg-oro-50 border border-oro-200 px-4 py-3 text-sm text-slate-700">👥 Esta tarea se asignó a <b>${esc(nombreGrupo(t))}</b> (${tamGrupo} ${tamGrupo === 1 ? 'persona' : 'personas'}). Cada quien tiene su propia copia.
+        ${rr ? `<label class="mt-2 flex items-center gap-2 font-semibold"><input type="checkbox" name="aplicarGrupo" class="h-4 w-4 accent-[#C10866]" ${grupo ? 'checked' : ''}> Aplicar título, descripción, prioridad, fecha y etiquetas a todo el grupo</label>` : ''}</div>` : ''}
+      ${asignacion}
       <div><label class="etiqueta">Título *</label><input name="Titulo" class="campo" required maxlength="120" value="${esc(t.Titulo || '')}" placeholder="Ej.: Inventario de tintas del mes" ${dis}></div>
       <div><label class="etiqueta">Descripción</label><textarea name="Descripcion" rows="3" class="campo" maxlength="2000" placeholder="Detalles, pasos, materiales…" ${dis}>${esc(t.Descripcion || '')}</textarea></div>
       <div class="grid grid-cols-2 gap-3">
-        <div><label class="etiqueta">Estado</label><select name="Estado" class="campo" ${dis}>${opciones(COLS_TAREA.map(c => c.e), t.Estado)}</select></div>
-        <div><label class="etiqueta">Prioridad</label><select name="Prioridad" class="campo" ${dis}>${opciones(['Baja', 'Media', 'Alta', 'Urgente'], t.Prioridad)}</select></div>
-        <div><label class="etiqueta">Responsable</label><select name="ResponsableID" class="campo" ${dis}>${opciones(activos.map(e => ({ v: e.ID, t: nombreCompleto(e) })), t.ResponsableID || '', 'Sin asignar')}</select></div>
-        <div><label class="etiqueta">Fecha límite</label><input name="FechaLimite" type="date" class="campo" value="${esc(t.FechaLimite || '')}" ${dis}></div>
-        <div><label class="etiqueta">Departamento</label><select name="Departamento" class="campo" ${dis}>${opciones(S.sesion.departamentos || [], t.Departamento || '', 'Ninguno en particular')}</select></div>
+        ${propuesta ? '' : `<div><label class="etiqueta">Estado</label><select name="Estado" class="campo" ${dis}>${opciones(COLS_TAREA.map(c => ({ v: c.e, t: c.t })), t.Estado)}</select></div>`}
+        <div><label class="etiqueta">Prioridad</label><select name="Prioridad" class="campo" ${rr && t.Estado === 'Por aprobar' ? '' : dis}>${opciones(['Baja', 'Media', 'Alta', 'Urgente'], t.Prioridad)}</select></div>
+        <div id="ft-resp" class="${propuesta ? 'col-span-2' : ''}"><label class="etiqueta">Responsable</label><select name="ResponsableID" class="campo" ${dis}>${opciones(activos.map(e => ({ v: e.ID, t: nombreCompleto(e) })), t.ResponsableID || '', 'Sin asignar')}</select></div>
+        <div><label class="etiqueta">Fecha límite</label><input name="FechaLimite" type="date" class="campo" value="${esc(t.FechaLimite || '')}" ${rr && t.Estado === 'Por aprobar' ? '' : dis}></div>
+        <div id="ft-depto"><label id="ft-depto-etq" class="etiqueta">Departamento</label><select name="Departamento" class="campo" ${dis}>${opciones(t.Departamento && !deps.includes(t.Departamento) ? deps.concat([t.Departamento]) : deps, t.Departamento || '', 'Ninguno en particular')}</select></div>
         <div><label class="etiqueta">Etiquetas</label><input name="Etiquetas" class="campo" maxlength="120" value="${esc(t.Etiquetas || '')}" placeholder="almacén, cliente X" ${dis}></div>
       </div>
-      ${rr ? '<p class="text-xs text-slate-500">Si asignas un responsable con correo, le llegará un aviso y verá la tarea en su celular, donde podrá marcarla como hecha.</p>' : ''}
-      ${t.ID ? `<p class="text-xs text-slate-400">Creada por ${esc(t.CreadoPor || '—')} el ${esc(String(t.Creado || '').slice(0, 16))}${t.Completado ? ` · completada el ${esc(String(t.Completado).slice(0, 16))}` : ''}</p>` : ''}
+      ${rr && nuevo ? '<p id="ft-ayuda" class="text-xs text-slate-500">La persona recibirá un correo y una notificación en su teléfono, y verá la tarea en su lista de actividades.</p>' : ''}
+      ${t.ID ? historialHTML(t) : ''}
+      ${t.ID ? `<p class="text-xs text-slate-400">Creada por ${esc(t.CreadoPor || '—')} el ${esc(String(t.Creado || '').slice(0, 16))}${t.Completado ? ` · terminada el ${esc(String(t.Completado).slice(0, 16))}` : ''}</p>` : ''}
     </form>`,
-    pie: rr ? `${t.ID ? `<button data-acc="borrar-tarea" data-id="${esc(t.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button>` : ''}
+    pie: !rr ? `<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
+      : t.Estado === 'Por aprobar' ? `<button data-acc="borrar-tarea" data-id="${esc(t.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button>
+        <button data-acc="no-aprobar-tarea" data-id="${esc(t.ID)}" class="btn-sec text-rose-600"><i data-lucide="x" class="w-4 h-4"></i>No aprobar</button>
+        <button data-acc="aprobar-tarea" data-id="${esc(t.ID)}" data-form="1" class="btn btn-sm bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-2.5"><i data-lucide="check" class="w-4 h-4"></i>Aprobar</button>`
+      : t.Estado === 'Rechazada' ? `<button data-acc="borrar-tarea" data-id="${esc(t.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button><button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
+      : `${t.ID ? `<button data-acc="borrar-tarea" data-id="${esc(t.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button>` : ''}
       <button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-tarea" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
-      : `<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>`
   });
+  if (nuevo) {
+    const f = $('#f-tarea');
+    const modo = () => (f.querySelector('[name="asignarA"]:checked') || {}).value || 'PERSONA';
+    const ajustar = () => {
+      const m = modo();
+      $('#ft-resp').classList.toggle('hidden', m !== 'PERSONA');
+      $('#ft-depto').classList.toggle('hidden', m === 'TODOS');
+      $('#ft-depto-etq').textContent = m === 'DEPARTAMENTO' ? 'Departamento que recibe la tarea *' : 'Departamento';
+      f.Departamento.required = m === 'DEPARTAMENTO';
+      const n = m === 'TODOS' ? S.empleados.filter(e => e.Estado !== 'Inactivo').length
+        : m === 'DEPARTAMENTO' ? S.empleados.filter(e => e.Estado !== 'Inactivo' && e.Departamento === f.Departamento.value).length : 1;
+      const ay = $('#ft-ayuda');
+      if (ay) ay.textContent = m === 'PERSONA' ? 'La persona recibirá un correo y una notificación en su teléfono, y verá la tarea en su lista de actividades.'
+        : `Cada persona (${n}) recibe su propia copia para marcar su avance, un correo y una notificación. En el tablero se ven agrupadas.`;
+    };
+    f.addEventListener('change', ajustar);
+    ajustar();
+  }
 }
 
 async function guardarTareaForm() {
   const f = $('#f-tarea');
   if (!f.reportValidity()) return;
   const datos = datosFormulario(f);
+  const asignarA = datos.asignarA || 'PERSONA', aplicarGrupo = !!f.aplicarGrupo?.checked;
+  delete datos.asignarA; delete datos.aplicarGrupo;
+  if (asignarA !== 'PERSONA') datos.ResponsableID = '';
+  if (asignarA === 'TODOS') datos.Departamento = '';
+  if (asignarA !== 'PERSONA') {
+    const n = asignarA === 'TODOS' ? S.empleados.filter(e => e.Estado !== 'Inactivo').length : S.empleados.filter(e => e.Estado !== 'Inactivo' && e.Departamento === datos.Departamento).length;
+    if (!await dialogo({ titulo: 'Asignar a varias personas', mensaje: `Se creará una copia de la tarea para cada una de las ${n} personas de ${asignarA === 'TODOS' ? 'todo el personal' : datos.Departamento}, y se les avisará por correo y notificación.`, boton: 'Asignar' })) return;
+  }
   try {
-    const r = await api('guardarTarea', { tarea: datos }, { texto: 'Guardando tarea…' });
-    const i = S.plan.tareas.findIndex(t => t.ID === r.ID);
-    if (i >= 0) S.plan.tareas[i] = r; else S.plan.tareas.push(r);
-    toast(datos.ID ? 'Tarea actualizada.' : 'Tarea creada.', 'ok');
+    const r = await api('guardarTarea', { tarea: datos, asignarA, departamento: datos.Departamento, aplicarGrupo }, { texto: 'Guardando tarea…' });
+    r.tareas.forEach(nt => {
+      const i = S.plan.tareas.findIndex(t => t.ID === nt.ID);
+      if (i >= 0) S.plan.tareas[i] = nt; else S.plan.tareas.push(nt);
+    });
+    const grupo = datos.ID && r.tareas[0]?.Grupo && S.modalVolver ? r.tareas[0].Grupo : null;
+    const base = datos.ID ? (r.tareas.length > 1 ? `Tarea actualizada (${r.tareas.length} copias del grupo).` : 'Tarea actualizada.') : r.tareas.length > 1 ? '' : 'Tarea creada.';
+    toast([base, r._aviso || (r.tareas.length > 1 && !datos.ID ? `Tarea asignada a ${r.tareas.length} personas.` : '')].filter(Boolean).join(' '), 'ok', r._aviso ? 9000 : 4500);
     cerrarModal();
+    if (grupo) verGrupo(grupo);
     if (S.seccion === 'tareas') pintarTareas();
     if (S.seccion === 'agenda') pintarAgenda();
   } catch (e) { toast(e.message, 'error', 6000); }
 }
 
+/** Elegir entre varias opciones (por ejemplo, borrar una copia o todo el grupo). */
+function elegir({ titulo, mensaje, opciones: ops }) {
+  return new Promise(resolve => {
+    const capa = document.createElement('div');
+    capa.className = 'confirmacion fixed inset-0 z-[95] flex items-center justify-center p-4 bg-slate-900/50';
+    capa.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+      <h4 class="font-bold text-lg mb-2">${esc(titulo)}</h4><p class="text-sm text-slate-600 mb-5">${esc(mensaje)}</p>
+      <div class="flex flex-col gap-2">${ops.map(o => `<button data-v="${esc(o.v)}" class="${o.peligro ? 'btn-peligro' : 'btn-sec'} w-full justify-center">${esc(o.t)}</button>`).join('')}
+        <button data-v="" class="btn-fantasma w-full justify-center">Cancelar</button></div></div>`;
+    capa.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-v]');
+      if (!b) return;
+      ev.stopPropagation(); capa.remove(); resolve(b.dataset.v || null);
+    });
+    document.body.appendChild(capa);
+  });
+}
+
 async function borrarTarea(id) {
-  if (!await confirmar('La tarea se eliminará de forma permanente.', { titulo: '¿Eliminar tarea?' })) return;
+  const t = S.plan.tareas.find(x => x.ID === id);
+  if (!t) return;
+  let grupo = false;
+  if (t.Grupo && deGrupo(t.Grupo).length > 1) {
+    const n = deGrupo(t.Grupo).length;
+    const v = await elegir({ titulo: '¿Qué quieres eliminar?', mensaje: `Esta tarea forma parte de un grupo de ${n} personas (${nombreGrupo(t)}).`,
+      opciones: [{ v: 'una', t: `Solo la copia de ${String(empPorId(t.ResponsableID)?.Nombres || 'esta persona').split(' ')[0]}` }, { v: 'grupo', t: `Todo el grupo (${n} copias)`, peligro: true }] });
+    if (!v) return;
+    grupo = v === 'grupo';
+  } else if (!await confirmar('La tarea se eliminará de forma permanente.', { titulo: '¿Eliminar tarea?' })) return;
   try {
-    await api('eliminarTarea', { id }, { texto: 'Eliminando…' });
-    S.plan.tareas = S.plan.tareas.filter(t => t.ID !== id);
-    toast('Tarea eliminada.', 'ok'); cerrarModal();
+    const r = await api('eliminarTarea', { id, grupo }, { texto: 'Eliminando…' });
+    const ids = new Set(r.ids || [id]);
+    S.plan.tareas = S.plan.tareas.filter(x => !ids.has(x.ID));
+    toast(ids.size > 1 ? `Se eliminaron ${ids.size} copias.` : 'Tarea eliminada.', 'ok'); cerrarModal();
+    if (!grupo && t.Grupo && deGrupo(t.Grupo).length) verGrupo(t.Grupo);
     if (S.seccion === 'tareas') pintarTareas();
     if (S.seccion === 'agenda') pintarAgenda();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/** Detalle de una tarea de grupo: avance de cada persona. */
+function verGrupo(grupo) {
+  const todos = deGrupo(grupo).sort((a, b) => ordenarNombre(empPorId(a.ResponsableID) || {}, empPorId(b.ResponsableID) || {}));
+  if (!todos.length) { S.grupoAbierto = null; return cerrarModal(); }
+  S.grupoAbierto = grupo;
+  const t = todos[0], rr = esRRHH();
+  const hechas = todos.filter(x => x.Estado === 'Hecho').length;
+  abrirModal({
+    titulo: t.Titulo,
+    ancho: 'sm:max-w-2xl',
+    cuerpo: `<div class="space-y-4">
+      <div class="flex flex-wrap items-center gap-2 text-sm"><span class="insignia ${ESTILO_PRIO[t.Prioridad] || ''}">${esc(t.Prioridad)}</span>
+        <span class="insignia bg-oro-100 text-oro-800">👥 ${esc(nombreGrupo(t))}</span>${chipFecha(t)}
+        <span class="text-xs text-slate-400">Asignada por ${esc(t.CreadoPor)} el ${esc(String(t.Creado).slice(0, 16))}</span></div>
+      ${t.Descripcion ? `<p class="text-sm text-slate-600 whitespace-pre-line">${esc(t.Descripcion)}</p>` : ''}
+      <div><div class="flex justify-between text-xs font-semibold text-slate-600 mb-1"><span>Avance del grupo</span><span>${hechas} de ${todos.length} terminadas</span></div>
+        <div class="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">${COLS_TAREA.map(c => { const n = todos.filter(x => x.Estado === c.e).length; return n ? `<div style="width:${n / todos.length * 100}%;background:${c.c}" title="${c.t}: ${n}"></div>` : ''; }).join('')}</div>
+        <div class="flex flex-wrap gap-3 mt-2 text-xs text-slate-500">${COLS_TAREA.map(c => `<span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full" style="background:${c.c}"></span>${c.t}: <b>${todos.filter(x => x.Estado === c.e).length}</b></span>`).join('')}</div></div>
+      <div class="rounded-xl border border-slate-200 divide-y divide-slate-100">${todos.map(x => {
+        const e = empPorId(x.ResponsableID);
+        return `<div class="px-4 py-2.5 flex items-center gap-3">
+          ${e ? avatarHTML(e.FotoMini, nombreCompleto(e), 'h-8 w-8 text-[10px]') : ''}
+          <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800 truncate">${esc(e ? nombreCompleto(e) : 'Sin asignar')}</p>
+            <p class="text-xs text-slate-400 truncate">${esc(e?.Departamento || '')} · actualizado ${esc(String(x.Actualizado).slice(0, 16))}</p></div>
+          ${rr ? `<select data-cambio="estado-tarea" data-id="${esc(x.ID)}" class="campo !w-auto !py-1.5 text-xs">${opciones(COLS_TAREA.map(c => ({ v: c.e, t: c.t })), x.Estado)}</select>`
+            : `<span class="insignia" style="background:${conAlfa((COLS_TAREA.find(c => c.e === x.Estado) || { c: '#94a3b8' }).c, 0.15)}">${esc(etqTarea(x.Estado))}</span>`}
+          <button data-acc="ver-tarea" data-id="${esc(x.ID)}" data-grupo="1" class="btn-fantasma btn-sm" title="Ver detalle e historial"><i data-lucide="history" class="w-4 h-4"></i></button>
+        </div>`;
+      }).join('')}</div></div>`,
+    pie: rr ? `<button data-acc="borrar-tarea" data-id="${esc(t.ID)}" class="btn-fantasma text-rose-600 mr-auto"><i data-lucide="trash-2" class="w-4 h-4"></i>Eliminar</button>
+      <button data-acc="editar-grupo" data-id="${esc(t.ID)}" class="btn-sec"><i data-lucide="pencil" class="w-4 h-4"></i>Editar para todos</button>
+      <button data-acc="cancelar-modal" class="btn-primario">Listo</button>` : '<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>'
+  });
+}
+
+function cambioEstadoGrupo(ev) {
+  const s = ev.target.closest('[data-cambio="estado-tarea"]');
+  if (!s) return;
+  moverTareaA(s.dataset.id, s.value);
+}
+
+async function decidirPropuesta(id, aprobar) {
+  const t = S.plan?.tareas.find(x => x.ID === id);
+  if (!t) return;
+  let motivo = '', extra = {};
+  if (!aprobar) {
+    motivo = await dialogo({ titulo: 'No aprobar actividad', mensaje: `Escribe el motivo. ${String(empPorId(t.ResponsableID)?.Nombres || 'El empleado').split(' ')[0]} lo verá en su lista y le llegará por correo.`,
+      conTexto: true, placeholder: 'Ej.: Ya está incluida en otra tarea del equipo.', boton: 'No aprobar', peligro: true });
+    if (!motivo) return;
+  } else if ($('#f-tarea') && $('#f-tarea').ID.value === id) {
+    extra = { prioridad: $('#f-tarea').Prioridad.value, fechaLimite: $('#f-tarea').FechaLimite.value };
+  }
+  try {
+    const r = await api('decidirTarea', Object.assign({ id, aprobar, motivo }, extra), { texto: aprobar ? 'Aprobando…' : 'Guardando…' });
+    Object.keys(t).forEach(k => delete t[k]); Object.assign(t, r);
+    toast(aprobar ? 'Actividad aprobada: ya está en "Pendiente". Se avisó al empleado.' : 'Listo. Se avisó al empleado con el motivo.', 'ok', 6000);
+    if ($('#f-tarea')) cerrarModal();
+    actualizarInsignia(S.plan.tareas.filter(x => x.Estado === 'Por aprobar').length, 'tareas');
+    if (S.seccion === 'tareas') pintarTareas();
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -3607,8 +3921,19 @@ function itemsDelDia(f) {
   const out = [], fl = S.agFiltros || new Set(FILTROS_AGENDA.map(x => x.k));
   if (fl.has('eventos')) (S.plan?.eventos || []).filter(e => e.Fecha === f).sort((a, b) => (a.HoraInicio || '99') < (b.HoraInicio || '99') ? -1 : 1)
     .forEach(e => out.push({ tipo: 'evento', id: e.ID, color: COLOR_EVENTO[e.Tipo] || '#64748b', hora: e.HoraInicio, titulo: e.Titulo, sub: [e.Tipo, e.HoraInicio ? e.HoraInicio + (e.HoraFin ? '–' + e.HoraFin : '') : 'Todo el día', e.Lugar].filter(Boolean).join(' · '), obj: e }));
-  if (fl.has('tareas')) (S.plan?.tareas || []).filter(t => t.FechaLimite === f)
-    .forEach(t => out.push({ tipo: 'tarea', id: t.ID, color: t.Estado === 'Hecho' ? '#10b981' : t.Prioridad === 'Urgente' ? '#e11d48' : '#0ea5e9', titulo: (t.Estado === 'Hecho' ? '✓ ' : '☐ ') + t.Titulo, sub: `Tarea · ${t.Estado} · ${t.ResponsableID ? nombreCompleto(empPorId(t.ResponsableID)) : 'sin asignar'}`, hecha: t.Estado === 'Hecho', obj: t }));
+  if (fl.has('tareas')) {
+    const grupos = new Set();
+    (S.plan?.tareas || []).filter(t => t.FechaLimite === f && enTablero(t)).forEach(t => {
+      if (t.Grupo) {
+        if (grupos.has(t.Grupo)) return;
+        grupos.add(t.Grupo);
+        const g = deGrupo(t.Grupo), hechas = g.filter(x => x.Estado === 'Hecho').length;
+        return out.push({ tipo: 'grupo', id: t.Grupo, color: hechas === g.length ? '#10b981' : t.Prioridad === 'Urgente' ? '#e11d48' : '#0ea5e9', titulo: (hechas === g.length ? '✓ ' : '👥 ') + t.Titulo,
+          sub: `Tarea de grupo · ${nombreGrupo(t)} · ${hechas} de ${g.length} terminadas`, hecha: hechas === g.length, obj: t });
+      }
+      out.push({ tipo: 'tarea', id: t.ID, color: t.Estado === 'Hecho' ? '#10b981' : t.Prioridad === 'Urgente' ? '#e11d48' : '#0ea5e9', titulo: (t.Estado === 'Hecho' ? '✓ ' : '☐ ') + t.Titulo, sub: `Tarea · ${etqTarea(t.Estado)} · ${t.ResponsableID ? nombreCompleto(empPorId(t.ResponsableID)) : 'sin asignar'}`, hecha: t.Estado === 'Hecho', obj: t });
+    });
+  }
   if (fl.has('permisos') && diaSemana(f) !== 7) (S.permisos || []).filter(p => (p.Estado === 'Aprobado' || p.Estado === 'Pendiente') && p.FechaInicio <= f && p.FechaFin >= f)
     .forEach(p => { const e = empPorId(p.EmpleadoID); out.push({ tipo: 'permiso', id: p.ID, color: p.Estado === 'Pendiente' ? '#94a3b8' : '#10b981', titulo: `${p.Tipo === 'Vacaciones' ? '🌴' : '📄'} ${e ? String(e.Nombres).split(' ')[0] + ' ' + String(e.Apellidos).split(' ')[0] : p.EmpleadoID}`, sub: `${p.Tipo}${p.Estado === 'Pendiente' ? ' (por aprobar)' : ''}`, obj: p }); });
   if (fl.has('cumple')) S.empleados.filter(e => e.Estado !== 'Inactivo' && /^\d{4}-\d{2}-\d{2}/.test(e.FechaNacimiento || '') && e.FechaNacimiento.slice(5, 10) === f.slice(5, 10))
@@ -3642,7 +3967,7 @@ function pintarAgenda() {
 function pintarDiaAgenda() {
   const f = S.agDia, items = itemsDelDia(f);
   $('#ag-dia-titulo').textContent = aFecha(f).toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' });
-  const acc = { evento: 'ver-evento', tarea: 'ver-tarea', permiso: 'nav', cumple: 'ver-expediente' };
+  const acc = { evento: 'ver-evento', tarea: 'ver-tarea', grupo: 'ver-grupo', permiso: 'nav', cumple: 'ver-expediente' };
   $('#ag-dia').innerHTML = (items.length ? items.map(x => `
     <button data-acc="${acc[x.tipo]}" data-id="${esc(x.id)}" ${x.tipo === 'permiso' ? 'data-sec="permisos"' : ''} class="w-full text-left px-5 py-3 flex gap-3 hover:bg-slate-50">
       <span class="mt-1 h-3 w-3 rounded-full shrink-0" style="background:${x.color}"></span>
@@ -3714,40 +4039,116 @@ async function borrarEvento(id) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-/* ---------- En el celular del empleado: sus tareas y actividades ---------- */
+/* ---------- En el celular del empleado: su lista de actividades (sin tablero) ---------- */
+const PASOS_EMPLEADO = [
+  { e: 'Pendiente', t: 'Pendiente', i: 'circle-dashed', c: 'bg-slate-600' }, { e: 'En progreso', t: 'En curso', i: 'loader', c: 'bg-sky-600' },
+  { e: 'En revisión', t: 'Esperando aprobación', i: 'hourglass', c: 'bg-amber-500' }, { e: 'Hecho', t: 'Terminada', i: 'circle-check', c: 'bg-emerald-600' }
+];
+
 async function cargarMiAgenda() {
   const card = $('#mc-agenda');
+  if (!S.sesion?.empleadoId) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
   try {
     const d = await api('miAgenda', {}, { silencioso: true });
     S.miAgenda = d;
-    if (!d.tareas.length && !d.eventos.length) { card.classList.add('hidden'); return; }
-    card.classList.remove('hidden');
-    const sig = { 'Pendiente': ['En progreso', 'Empezar', 'play'], 'En progreso': ['Hecho', 'Listo', 'check'], 'En revisión': ['Hecho', 'Listo', 'check'] };
-    const tareas = d.tareas.sort((a, b) => (a.Estado === 'Hecho') - (b.Estado === 'Hecho') || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9'))).map(t => {
-      const v = estadoVencimiento(t), s = sig[t.Estado];
-      return `<div class="px-5 py-3 flex items-center gap-3">
-        <span class="h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${t.Estado === 'Hecho' ? 'bg-emerald-50 text-emerald-600' : 'bg-sky-50 text-sky-700'}"><i data-lucide="${t.Estado === 'Hecho' ? 'circle-check' : 'square-kanban'}" class="w-5 h-5"></i></span>
-        <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800 ${t.Estado === 'Hecho' ? 'line-through text-slate-400' : ''}">${esc(t.Titulo)}</p>
-          <p class="text-xs ${v === 'vencida' ? 'text-rose-600 font-semibold' : v === 'pronto' ? 'text-amber-600' : 'text-slate-500'}">${esc(t.Estado)} · ${esc(t.Prioridad)}${t.FechaLimite ? ' · vence ' + esc(fmtFechaCorta(t.FechaLimite)) + (v === 'vencida' ? ' (vencida)' : '') : ''}</p></div>
-        ${s ? `<button data-acc="mi-tarea" data-id="${esc(t.ID)}" data-estado="${s[0]}" class="btn btn-sm ${s[0] === 'Hecho' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-navy-900 text-white hover:bg-navy-950'} shrink-0"><i data-lucide="${s[2]}" class="w-4 h-4"></i>${s[1]}</button>` : ''}
-      </div>`;
-    }).join('');
-    const eventos = d.eventos.map(e => `<div class="px-5 py-3 flex items-center gap-3">
-        <span class="h-9 w-9 shrink-0 rounded-xl flex flex-col items-center justify-center text-white leading-none" style="background:${COLOR_EVENTO[e.Tipo] || '#64748b'}"><span class="text-sm font-extrabold">${Number(e.Fecha.slice(8))}</span><span class="text-[9px] uppercase">${esc(MESES[Number(e.Fecha.slice(5, 7)) - 1])}</span></span>
-        <div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(e.Titulo)}</p>
-          <p class="text-xs text-slate-500">${esc([fmtFechaCorta(e.Fecha), e.HoraInicio ? e.HoraInicio + (e.HoraFin ? '–' + e.HoraFin : '') : 'Todo el día', e.Lugar].filter(Boolean).join(' · '))}</p></div>
-      </div>`).join('');
-    $('#mc-agenda-lista').innerHTML = tareas + eventos;
-    iconos();
-  } catch (e) { card.classList.add('hidden'); }
+    pintarMiAgenda();
+  } catch (e) { $('#mc-agenda-lista').innerHTML = `<p class="px-5 py-4 text-sm text-slate-400">${esc(e.message)}</p>`; }
+}
+
+function pintarMiAgenda() {
+  const d = S.miAgenda;
+  if (!d) return;
+  const orden = { 'Rechazada': 0, 'Por aprobar': 1, 'En progreso': 2, 'Pendiente': 3, 'En revisión': 4 };
+  const tareas = d.tareas.slice().sort((a, b) => (orden[a.Estado] ?? 9) - (orden[b.Estado] ?? 9) || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9')));
+  const activas = tareas.filter(t => PASOS_EMPLEADO.some(p => p.e === t.Estado)).length;
+  $('#mc-agenda-cuenta').textContent = activas ? `${activas} en curso o pendiente${activas === 1 ? '' : 's'}` : '';
+  const filaTarea = t => {
+    const v = estadoVencimiento(t);
+    const meta = [t.Prioridad, t.FechaLimite ? 'vence ' + fmtFechaCorta(t.FechaLimite) + (v === 'vencida' ? ' (vencida)' : '') : '', t.Origen === 'EMPLEADO' ? 'propuesta por ti' : 'asignada por RRHH'].filter(Boolean).join(' · ');
+    let estado;
+    if (t.Estado === 'Por aprobar') {
+      estado = `<div class="mt-2 flex flex-wrap items-center gap-2"><span class="insignia bg-violet-100 text-violet-700"><i data-lucide="hourglass" class="w-3 h-3"></i>Esperando aprobación de RRHH</span>
+        <button data-acc="retirar-mi-tarea" data-id="${esc(t.ID)}" class="text-xs font-semibold text-slate-500 hover:text-rose-600">Retirar</button></div>`;
+    } else if (t.Estado === 'Rechazada') {
+      estado = `<div class="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><b>No aprobada.</b> ${esc(t.MotivoRechazo || '')}</div>`;
+    } else {
+      estado = `<div class="mt-2 grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Estado de la actividad">${PASOS_EMPLEADO.map(p => {
+        const sel = p.e === t.Estado;
+        return `<button data-acc="mi-tarea" data-id="${esc(t.ID)}" data-estado="${p.e}" role="radio" aria-checked="${sel}"
+          class="paso-tarea flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold border ${sel ? p.c + ' text-white border-transparent shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}">
+          <i data-lucide="${p.i}" class="w-3.5 h-3.5"></i>${p.t}</button>`;
+      }).join('')}</div>`;
+    }
+    return `<div class="px-5 py-3.5">
+      <div class="flex items-start gap-3">
+        <span class="h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${t.Estado === 'Rechazada' ? 'bg-rose-50 text-rose-600' : t.Estado === 'Por aprobar' ? 'bg-violet-50 text-violet-700' : 'bg-sky-50 text-sky-700'}"><i data-lucide="${t.Origen === 'EMPLEADO' ? 'clipboard-pen' : 'square-kanban'}" class="w-5 h-5"></i></span>
+        <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(t.Titulo)}</p>
+          <p class="text-xs ${v === 'vencida' ? 'text-rose-600 font-semibold' : v === 'pronto' ? 'text-amber-600' : 'text-slate-500'}">${esc(meta)}</p>
+          ${t.Descripcion ? `<p class="text-xs text-slate-500 mt-0.5 line-clamp-2">${esc(t.Descripcion)}</p>` : ''}</div>
+      </div>${estado}</div>`;
+  };
+  const eventos = d.eventos.map(e => `<div class="px-5 py-3 flex items-center gap-3">
+      <span class="h-9 w-9 shrink-0 rounded-xl flex flex-col items-center justify-center text-white leading-none" style="background:${COLOR_EVENTO[e.Tipo] || '#64748b'}"><span class="text-sm font-extrabold">${Number(e.Fecha.slice(8))}</span><span class="text-[9px] uppercase">${esc(MESES[Number(e.Fecha.slice(5, 7)) - 1])}</span></span>
+      <div class="min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(e.Titulo)}</p>
+        <p class="text-xs text-slate-500">${esc([fmtFechaCorta(e.Fecha), e.HoraInicio ? e.HoraInicio + (e.HoraFin ? '–' + e.HoraFin : '') : 'Todo el día', e.Lugar].filter(Boolean).join(' · '))}</p></div>
+    </div>`).join('');
+  $('#mc-agenda-lista').innerHTML = (tareas.length ? tareas.map(filaTarea).join('')
+    : '<div class="px-5 py-5 text-center"><p class="text-sm text-slate-500">No tienes actividades pendientes. 🎉</p><p class="text-xs text-slate-400 mt-1">Si tienes algo por hacer, regístralo con <b>Agregar</b> y RRHH lo aprobará.</p></div>') +
+    (eventos ? `<p class="px-5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">Próximas actividades de la empresa</p>${eventos}` : '');
+  iconos();
 }
 
 async function cambiarMiTarea(id, estado) {
+  const t = S.miAgenda?.tareas.find(x => x.ID === id);
+  if (!t || t.Estado === estado) return;
+  if (estado === 'Hecho' && !await dialogo({ titulo: '¿Actividad terminada?', mensaje: `"${t.Titulo}" se marcará como terminada y ya no aparecerá en tu lista. RRHH será avisado.`, boton: 'Sí, terminada' })) return;
+  const antes = t.Estado;
+  t.Estado = estado; pintarMiAgenda();
   try {
-    await api('moverTarea', { id, estado }, { texto: 'Actualizando…' });
-    toast(estado === 'Hecho' ? '¡Tarea completada! ✅ RRHH ya fue avisado.' : 'Tarea en progreso.', 'ok', 5000);
-    if (estado === 'Hecho') lanzarConfeti(1500);
-    cargarMiAgenda();
+    await api('moverTarea', { id, estado }, { silencioso: true });
+    const msg = { 'Hecho': '¡Actividad terminada! ✅ RRHH ya fue avisado.', 'En revisión': 'Listo: RRHH fue avisado para revisarla.', 'En progreso': 'Actividad en curso.', 'Pendiente': 'Actividad marcada como pendiente.' }[estado];
+    toast(msg, 'ok', 5000);
+    if (estado === 'Hecho') { lanzarConfeti(1800); S.miAgenda.tareas = S.miAgenda.tareas.filter(x => x.ID !== id); pintarMiAgenda(); }
+  } catch (e) { t.Estado = antes; pintarMiAgenda(); toast(e.message, 'error'); }
+}
+
+function formProponerTarea() {
+  abrirModal({
+    titulo: 'Agregar una actividad pendiente',
+    ancho: 'sm:max-w-md',
+    cuerpo: `<form id="f-proponer" class="space-y-4" onsubmit="return false">
+      <p class="text-sm text-slate-600">Registra algo que tengas por hacer. <b>Recursos Humanos</b> lo revisará y, al aprobarlo, aparecerá en tu lista para que vayas marcando su avance.</p>
+      <div><label class="etiqueta">¿Qué tienes que hacer? *</label><input name="Titulo" class="campo" required maxlength="120" placeholder="Ej.: Limpiar los cabezales del plotter"></div>
+      <div><label class="etiqueta">Detalles (opcional)</label><textarea name="Descripcion" rows="3" class="campo" maxlength="2000" placeholder="Materiales, cliente, pasos…"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">Prioridad</label><select name="Prioridad" class="campo">${opciones(['Baja', 'Media', 'Alta', 'Urgente'], 'Media')}</select></div>
+        <div><label class="etiqueta">¿Para cuándo?</label><input name="FechaLimite" type="date" class="campo" min="${hoyStr()}"></div>
+      </div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="enviar-propuesta" class="btn-primario"><i data-lucide="send" class="w-4 h-4"></i>Enviar a RRHH</button>`
+  });
+  setTimeout(() => $('#f-proponer')?.Titulo.focus(), 80);
+}
+
+async function enviarPropuesta() {
+  const f = $('#f-proponer');
+  if (!f.reportValidity()) return;
+  try {
+    const t = await api('proponerTarea', { tarea: datosFormulario(f) }, { texto: 'Enviando…' });
+    cerrarModal();
+    toast('¡Enviada! RRHH la revisará y te avisaremos cuando la apruebe.', 'ok', 6000);
+    if (S.miAgenda) { S.miAgenda.tareas.push(t); pintarMiAgenda(); } else cargarMiAgenda();
+  } catch (e) { toast(e.message, 'error', 6000); }
+}
+
+async function retirarMiTarea(id) {
+  if (!await confirmar('La actividad se quitará y RRHH ya no la verá por aprobar.', { titulo: '¿Retirar esta actividad?', boton: 'Retirar' })) return;
+  try {
+    await api('retirarTarea', { id }, { texto: 'Retirando…' });
+    S.miAgenda.tareas = S.miAgenda.tareas.filter(t => t.ID !== id);
+    pintarMiAgenda();
+    toast('Actividad retirada.', 'ok');
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -3907,6 +4308,223 @@ function contratarCV(id) {
     Departamento: (S.sesion.departamentos || []).includes(c.Departamento) ? c.Departamento : '', Cargo: c.Cargo, NivelInstruccion: c.NivelInstruccion } });
 }
 
+/* ======================= 17p. NOTIFICACIONES (campanita + push) ======================= */
+const PUSH_CACHE = 'sumanpek-push';
+const PUSH_CFG_URL = () => new URL('__push_cfg', location.origin + location.pathname.replace(/[^/]*$/, '')).href;
+const ICONO_NOTIF = { TAREA: ['square-kanban', 'bg-sky-50 text-sky-700'], PERMISO: ['plane', 'bg-emerald-50 text-emerald-700'], MARCAJE: ['clock', 'bg-amber-50 text-amber-700'],
+  AGENDA: ['calendar-days', 'bg-violet-50 text-violet-700'], RECONOCIMIENTO: ['trophy', 'bg-oro-100 text-oro-700'], ACCESO: ['user-plus', 'bg-marca-50 text-marca-700'],
+  CIERRE: ['alarm-clock', 'bg-rose-50 text-rose-700'], PRUEBA: ['bell-ring', 'bg-navy-50 text-navy-700'] };
+
+const enModoApp = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+const soportaPush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && location.protocol === 'https:';
+const permisoPush = () => ('Notification' in window ? Notification.permission : 'unsupported');
+const sonidoActivo = () => { try { return localStorage.getItem('aa_sonido') !== 'no'; } catch (e) { return true; } };
+
+function nombreDispositivo() {
+  const ua = navigator.userAgent;
+  const so = /Android/i.test(ua) ? 'Android' : esIOS() ? 'iPhone/iPad' : /Windows/i.test(ua) ? 'Windows' : /Mac/i.test(ua) ? 'Mac' : /Linux/i.test(ua) ? 'Linux' : 'Dispositivo';
+  const nav = /Edg\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox/.test(ua) ? 'Firefox' : /CriOS|Chrome/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'Navegador';
+  return `${so} · ${nav}${enModoApp() ? ' (app)' : ''}`;
+}
+
+function b64aBytes(b64) {
+  const s = atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - b64.length % 4) % 4));
+  return Uint8Array.from(s, c => c.charCodeAt(0));
+}
+
+/** Sonido propio de Sumanpek (dentro de la app). */
+function sonarNotificacion(forzar = false) {
+  if (!forzar && !sonidoActivo()) return;
+  try {
+    S.sonidoNotif = S.sonidoNotif || new Audio('notificacion.mp3');
+    S.sonidoNotif.currentTime = 0;
+    S.sonidoNotif.volume = 0.9;
+    S.sonidoNotif.play().catch(() => { /* el navegador lo bloqueó: no pasa nada */ });
+  } catch (e) { /* sin audio */ }
+}
+
+function actualizarCampana(n) {
+  if (S.sesion) S.sesion.notifNoLeidas = n;
+  $$('.campana-num').forEach(b => { b.textContent = n > 9 ? '9+' : n; b.classList.toggle('hidden', !n); });
+}
+
+/** Guarda en el teléfono lo que el service worker necesita para preguntar por las notificaciones. */
+async function guardarConfigPush(cfg) {
+  try { const c = await caches.open(PUSH_CACHE); await c.put(PUSH_CFG_URL(), new Response(JSON.stringify(cfg), { headers: { 'Content-Type': 'application/json' } })); } catch (e) { /* nada */ }
+}
+
+async function suscripcionActual() {
+  if (!soportaPush()) return null;
+  try { const reg = await navigator.serviceWorker.getRegistration(); return reg ? await reg.pushManager.getSubscription() : null; } catch (e) { return null; }
+}
+
+/** Crea (o reutiliza) la suscripción de este dispositivo y la registra en el servidor. */
+async function registrarDispositivo({ silencioso = false } = {}) {
+  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, no) => setTimeout(() => no(new Error('La app aún se está instalando. Intenta de nuevo en unos segundos.')), 8000))]);
+  const { clavePublica } = await api('pushConfig', {}, { silencioso: true });
+  const llave = b64aBytes(clavePublica);
+  let sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    const actual = sub.options?.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+    if (actual && (actual.length !== llave.length || actual.some((b, i) => b !== llave[i]))) { await sub.unsubscribe(); sub = null; }
+  }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: llave });
+  const { clave } = await api('suscribirPush', { endpoint: sub.endpoint, dispositivo: nombreDispositivo() }, { silencioso: true, texto: 'Activando…' });
+  await guardarConfigPush({ api: CONFIG.API_URL, clave, email: S.sesion.email });
+  try { localStorage.setItem('aa_push', JSON.stringify({ ep: sub.endpoint, email: S.sesion.email, t: Date.now() })); } catch (e) { /* nada */ }
+  if (!silencioso) toast('🔔 ¡Notificaciones activadas en este dispositivo!', 'ok', 5000);
+  return sub;
+}
+
+/** Al iniciar sesión: si ya dio permiso antes, se mantiene la suscripción al día (sin preguntar nada). */
+async function sincronizarPush() {
+  pintarAvisoNotificaciones();
+  if (!soportaPush() || permisoPush() !== 'granted' || !S.sesion) return;
+  try {
+    const sub = await suscripcionActual();
+    let guardado = null;
+    try { guardado = JSON.parse(localStorage.getItem('aa_push') || 'null'); } catch (e) { /* nada */ }
+    if (sub && guardado && guardado.ep === sub.endpoint && guardado.email === S.sesion.email && Date.now() - guardado.t < 3 * 864e5) return;
+    await registrarDispositivo({ silencioso: true });
+  } catch (e) { /* se reintenta la próxima vez */ }
+}
+
+async function activarNotificaciones() {
+  if (!soportaPush()) {
+    return toast(esIOS() && !enModoApp() ? 'En iPhone primero instala la app: botón Compartir → "Agregar a inicio", y ábrela desde ese ícono.' : 'Este navegador no admite notificaciones. Prueba con Chrome.', 'aviso', 8000);
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      toast(perm === 'denied' ? 'Las notificaciones están bloqueadas. Actívalas en los ajustes del navegador (ícono 🔒 junto a la dirección).' : 'No se activaron las notificaciones.', 'aviso', 8000);
+      pintarAvisoNotificaciones(); return;
+    }
+    cargando(true, 'Activando notificaciones…');
+    try { await registrarDispositivo(); } finally { cargando(false); }
+    sonarNotificacion(true);
+  } catch (e) { toast(e.message, 'error', 7000); }
+  pintarAvisoNotificaciones();
+  if (!$('#modal').classList.contains('hidden') && $('#notif-estado')) pintarEstadoPush();
+}
+
+async function desactivarNotificaciones({ silencioso = false } = {}) {
+  const sub = await suscripcionActual();
+  try { if (sub && S.token) await api('desuscribirPush', { endpoint: sub.endpoint }, { silencioso: true }); } catch (e) { /* nada */ }
+  try { if (sub) await sub.unsubscribe(); } catch (e) { /* nada */ }
+  try { await caches.delete(PUSH_CACHE); localStorage.removeItem('aa_push'); } catch (e) { /* nada */ }
+  if (!silencioso) { toast('Notificaciones desactivadas en este dispositivo.', 'ok'); pintarEstadoPush(); }
+}
+
+/** Tarjeta para invitar al empleado a activar los avisos (una vez; se puede posponer). */
+function pintarAvisoNotificaciones() {
+  const el = $('#mc-notif');
+  if (!el) return;
+  let pospuesto = false;
+  try { pospuesto = Date.now() - Number(localStorage.getItem('aa_notif_luego') || 0) < 14 * 864e5; } catch (e) { /* nada */ }
+  const mostrar = S.sesion && soportaPush() && permisoPush() === 'default' && !pospuesto;
+  const iosSinInstalar = S.sesion && esIOS() && !enModoApp() && !pospuesto;
+  el.classList.toggle('hidden', !(mostrar || iosSinInstalar));
+  if (!(mostrar || iosSinInstalar)) return;
+  el.innerHTML = `<div class="flex items-start gap-3">
+    <span class="h-11 w-11 rounded-xl bg-marca-50 text-marca-700 flex items-center justify-center shrink-0"><i data-lucide="bell-ring" class="w-5 h-5"></i></span>
+    <div class="flex-1 min-w-0"><p class="font-semibold text-slate-800">Activa las notificaciones</p>
+      <p class="text-xs text-slate-500">${iosSinInstalar && !mostrar ? 'En iPhone, primero instala la app (Compartir → "Agregar a inicio") y ábrela desde ese ícono.' : 'Te avisaremos al instante de tareas nuevas, permisos aprobados y novedades.'}</p>
+      <div class="flex gap-2 mt-3">${mostrar ? '<button data-acc="activar-notif" class="btn-primario btn-sm"><i data-lucide="bell" class="w-4 h-4"></i>Activar</button>' : ''}
+        <button data-acc="notif-luego" class="btn-fantasma btn-sm">Ahora no</button></div></div></div>`;
+  iconos();
+}
+
+async function pintarEstadoPush() {
+  const el = $('#notif-estado');
+  if (!el) return;
+  const perm = permisoPush(), sub = await suscripcionActual();
+  let html;
+  if (!soportaPush()) {
+    html = `<p class="text-sm text-slate-600">${esIOS() && !enModoApp() ? '📱 En iPhone, las notificaciones funcionan con la app instalada: toca <b>Compartir → "Agregar a inicio"</b> y ábrela desde ese ícono.' : 'Este navegador no admite notificaciones. Usa Chrome (Android o computadora) o la app instalada.'}</p>`;
+  } else if (perm === 'denied') {
+    html = `<p class="text-sm text-slate-600">🔕 Las notificaciones están <b>bloqueadas</b> para esta página. Toca el ícono 🔒 junto a la dirección (o Ajustes → Apps → Asistencia Sumanpek → Notificaciones) y permítelas.</p>`;
+  } else if (perm === 'granted' && sub) {
+    html = `<div class="flex flex-wrap items-center gap-2"><p class="flex-1 min-w-[180px] text-sm text-emerald-700 font-semibold">✅ Activas en este dispositivo</p>
+      <button data-acc="probar-notif" class="btn-sec btn-sm"><i data-lucide="send" class="w-4 h-4"></i>Enviar una prueba</button>
+      <button data-acc="desactivar-notif" class="btn-fantasma btn-sm text-slate-500">Desactivar</button></div>`;
+  } else {
+    html = `<div class="flex flex-wrap items-center gap-2"><p class="flex-1 min-w-[180px] text-sm text-slate-600">Recibe los avisos en este teléfono aunque la app esté cerrada.</p>
+      <button data-acc="activar-notif" class="btn-primario btn-sm"><i data-lucide="bell" class="w-4 h-4"></i>Activar notificaciones</button></div>`;
+  }
+  el.innerHTML = html + `<div class="mt-3 pt-3 border-t border-slate-200 flex flex-wrap items-center gap-2 text-sm">
+      <label class="flex items-center gap-2 flex-1 min-w-[180px]"><input type="checkbox" data-cambio="sonido" class="h-4 w-4 accent-[#C10866]" ${sonidoActivo() ? 'checked' : ''}> Sonido de Sumanpek con la app abierta</label>
+      <button data-acc="oir-sonido" class="btn-fantasma btn-sm"><i data-lucide="volume-2" class="w-4 h-4"></i>Escuchar</button></div>
+    ${/Android/i.test(navigator.userAgent) ? '<p class="mt-2 text-[11px] text-slate-400">Con la app cerrada, Android usa el sonido de notificación del teléfono. Si quieres este mismo sonido, <a href="notificacion.mp3" download="notificacion-sumanpek.mp3" class="underline">descárgalo</a> y elígelo en Ajustes → Apps → Asistencia Sumanpek → Notificaciones → Sonido.</p>' : ''}`;
+  iconos();
+}
+
+const haceCuanto = f => {
+  const d = (Date.now() - new Date(String(f).replace(' ', 'T') + '-04:00').getTime()) / 60000;
+  if (!isFinite(d)) return '';
+  if (d < 1) return 'ahora';
+  if (d < 60) return `hace ${Math.round(d)} min`;
+  if (d < 1440) return `hace ${Math.round(d / 60)} h`;
+  if (d < 2880) return 'ayer';
+  return fmtFechaCorta(String(f).slice(0, 10));
+};
+
+async function abrirNotificaciones() {
+  abrirModal({
+    titulo: 'Notificaciones',
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<div id="notif-estado" class="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-4"></div>
+      <div id="notif-lista" class="divide-y divide-slate-100 -mx-1"><p class="py-6 text-center text-sm text-slate-400">Cargando…</p></div>`,
+    pie: '<button data-acc="cancelar-modal" class="btn-primario">Cerrar</button>'
+  });
+  pintarEstadoPush();
+  try {
+    const d = await api('misNotificaciones', {}, { silencioso: true });
+    const lista = $('#notif-lista');
+    if (!lista) return;
+    lista.innerHTML = d.notificaciones.length ? d.notificaciones.map(n => {
+      const [ic, cl] = ICONO_NOTIF[n.Tipo] || ['bell', 'bg-slate-100 text-slate-600'];
+      return `<button data-acc="ir-notif" data-ruta="${esc(n.Ruta || '')}" class="w-full text-left px-1 py-3 flex items-start gap-3 hover:bg-slate-50 rounded-lg">
+        <span class="h-9 w-9 shrink-0 rounded-xl flex items-center justify-center ${cl}"><i data-lucide="${ic}" class="w-4 h-4"></i></span>
+        <span class="flex-1 min-w-0"><span class="block text-sm ${n.Leida ? 'text-slate-700' : 'font-bold text-slate-900'}">${esc(n.Titulo)}</span>
+          ${n.Cuerpo ? `<span class="block text-xs text-slate-500">${esc(n.Cuerpo)}</span>` : ''}
+          <span class="block text-[11px] text-slate-400 mt-0.5">${esc(haceCuanto(n.Creado))}</span></span>
+        ${n.Leida ? '' : '<span class="mt-1.5 h-2.5 w-2.5 rounded-full bg-marca-600 shrink-0"></span>'}</button>`;
+    }).join('') : '<p class="py-8 text-center text-sm text-slate-400">No tienes notificaciones todavía.</p>';
+    iconos();
+    if (d.noLeidas) {
+      actualizarCampana(0);
+      api('leerNotificaciones', {}, { silencioso: true }).catch(() => {});
+    }
+  } catch (e) { const l = $('#notif-lista'); if (l) l.innerHTML = `<p class="py-6 text-center text-sm text-rose-600">${esc(e.message)}</p>`; }
+}
+
+async function probarNotificacion() {
+  try {
+    const r = await api('probarNotificacion', {}, { texto: 'Enviando prueba…' });
+    toast(r.dispositivos ? 'Prueba enviada: debería llegarte en unos segundos.' : 'No hay dispositivos con notificaciones activas para tu usuario.', r.dispositivos ? 'ok' : 'aviso', 6000);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/** Mensajes del service worker: llegó un aviso con la app abierta, o se tocó una notificación. */
+function escucharServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.addEventListener('message', ev => {
+    const m = ev.data || {};
+    if (m.tipo === 'push' && S.sesion) {
+      const n = (m.nuevas || [])[0];
+      if (!n) return;
+      if (document.visibilityState === 'visible') {
+        sonarNotificacion();
+        toast(n.titulo + (n.cuerpo ? ' · ' + n.cuerpo : ''), 'info', 7000);
+      }
+      actualizarCampana((S.sesion.notifNoLeidas || 0) + (m.nuevas || []).length);
+      if (!$('#v-marcaje').classList.contains('hidden')) cargarMiAgenda();
+      if (S.seccion === 'tareas' && !$('#v-admin').classList.contains('hidden')) cargarTareas(true);
+    }
+    if (m.tipo === 'abrir' && m.ruta && S.sesion) { cerrarModal(); location.hash = m.ruta; }
+  });
+}
+
 /* ======================= 17n. REGISTRO DE ACTIVIDAD (solo lectura) ======================= */
 const CAT_REGISTRO = {
   'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
@@ -3914,14 +4532,18 @@ const CAT_REGISTRO = {
   'Permisos y vacaciones': ['PERMISO_CREADO', 'PERMISO_EDITADO', 'PERMISO_ELIMINADO', 'PERMISO_SOLICITADO', 'PERMISO_ANULADO', 'PERMISO_APROBADO', 'PERMISO_RECHAZADO'],
   'Documentos y manuales': ['DOCUMENTO_SUBIDO', 'DOCUMENTO_ELIMINADO', 'MANUAL_SUBIDO', 'MANUAL_ELIMINADO'],
   'Desempeño y reconocimientos': ['EVALUACION_CREADA', 'EVALUACION_EDITADA', 'EVALUACION_ELIMINADA', 'EMPLEADO_DEL_MES', 'EMPLEADO_DEL_MES_QUITADO', 'DEPARTAMENTO_DEL_MES'],
-  'Tareas y agenda': ['TAREA_CREADA', 'TAREA_EDITADA', 'TAREA_MOVIDA', 'TAREA_ELIMINADA', 'EVENTO_CREADO', 'EVENTO_EDITADO', 'EVENTO_ELIMINADO'],
+  'Tareas y agenda': ['TAREA_CREADA', 'TAREA_EDITADA', 'TAREA_MOVIDA', 'TAREA_ELIMINADA', 'TAREA_PROPUESTA', 'TAREA_APROBADA', 'TAREA_RECHAZADA', 'TAREA_RETIRADA',
+    'EVENTO_CREADO', 'EVENTO_EDITADO', 'EVENTO_ELIMINADO'],
   'Currículums': ['CURRICULUM_REGISTRADO', 'CURRICULUM_EDITADO', 'CURRICULUM_CALIFICADO', 'CURRICULUM_ELIMINADO'],
-  'Ajustes y sistema': ['AJUSTES', 'DEPARTAMENTO_CREADO', 'DEPARTAMENTO_RENOMBRADO', 'DEPARTAMENTO_ACTIVADO', 'DEPARTAMENTO_DESACTIVADO', 'DEPARTAMENTO_ELIMINADO', 'RESPALDO']
+  'Ajustes y sistema': ['AJUSTES', 'DEPARTAMENTO_CREADO', 'DEPARTAMENTO_RENOMBRADO', 'DEPARTAMENTO_ACTIVADO', 'DEPARTAMENTO_DESACTIVADO', 'DEPARTAMENTO_ELIMINADO', 'RESPALDO',
+    'NOTIFICACIONES_ACTIVADAS', 'NOTIFICACIONES_DESACTIVADAS', 'MIGRACION_CARGOS']
 };
 const COLOR_CAT = ['bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700',
   'bg-marca-100 text-marca-700', 'bg-navy-100 text-navy-700', 'bg-oro-100 text-oro-700', 'bg-slate-200 text-slate-700'];
 const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJUSTES: 'Cambió ajustes', RESPALDO: 'Respaldo creado', EMPLEADO_DEL_MES: 'Empleado del mes',
-  DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso' };
+  DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso',
+  TAREA_PROPUESTA: 'Propuso una actividad', TAREA_APROBADA: 'Aprobó una actividad', TAREA_RECHAZADA: 'No aprobó una actividad', TAREA_RETIRADA: 'Retiró una actividad',
+  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos' };
 const etiquetaAccion = a => ETIQUETA_ACCION[a] || (a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' '))
   .replace(/^Curriculum/, 'Currículum').replace(/^Evaluacion/, 'Evaluación').replace(/ dia/, ' día');
 const catDeAccion = a => Object.keys(CAT_REGISTRO).find(k => CAT_REGISTRO[k].includes(a)) || 'Otros';
@@ -3967,7 +4589,7 @@ const GUIAS_INCLUIDAS = [
     Descripcion: 'Una sola hoja con lo esencial: instalar la app, marcar entrada y salida, pedir marcajes y permisos, tus tareas y más.', incluida: true }
 ];
 
-function iconoArchivo(m) {
+function iconoManual(m) {
   const t = String(m.FileMime || (m.url ? 'application/pdf' : ''));
   return /pdf/.test(t) ? ['file-text', 'bg-rose-50 text-rose-600'] : /image/.test(t) ? ['image', 'bg-sky-50 text-sky-600']
     : /word|document/.test(t) ? ['file-type', 'bg-blue-50 text-blue-600'] : /sheet|excel/.test(t) ? ['file-spreadsheet', 'bg-emerald-50 text-emerald-600'] : ['file', 'bg-slate-100 text-slate-600'];
@@ -3976,7 +4598,7 @@ function iconoArchivo(m) {
 function ayudaHTML(manuales, categorias) {
   const todos = GUIAS_INCLUIDAS.concat(manuales);
   const cats = (categorias || ['Guías de usuario', 'Procedimientos', 'Normas y políticas', 'Formatos', 'Otros']).filter(c => todos.some(m => m.Categoria === c));
-  const tarjeta = m => { const [ic, col] = iconoArchivo(m); return `<div class="tarjeta p-4 flex items-start gap-3">
+  const tarjeta = m => { const [ic, col] = iconoManual(m); return `<div class="tarjeta p-4 flex items-start gap-3">
       <span class="h-11 w-11 rounded-xl ${col} flex items-center justify-center shrink-0"><i data-lucide="${ic}" class="w-5 h-5"></i></span>
       <div class="flex-1 min-w-0">
         <p class="font-semibold text-slate-800">${esc(m.Titulo)}</p>
@@ -4020,7 +4642,7 @@ function formManual() {
   abrirModal({
     titulo: 'Subir documento de ayuda',
     ancho: 'sm:max-w-lg',
-    cuerpo: `<form id="f-manual" class="space-y-4" onsubmit="return false">
+    cuerpo: `<form id="f-manual-ayuda" class="space-y-4" onsubmit="return false">
       <div><label class="etiqueta">Título *</label><input name="titulo" class="campo" required maxlength="120" placeholder="Ej.: Manual de normas internas"></div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="etiqueta">Categoría</label><select name="categoria" class="campo">${opciones(S.ayuda?.categorias || ['Guías de usuario', 'Procedimientos', 'Normas y políticas', 'Formatos', 'Otros'], 'Procedimientos')}</select></div>
@@ -4029,12 +4651,12 @@ function formManual() {
       <div><label class="etiqueta">Descripción corta</label><input name="descripcion" class="campo" maxlength="300" placeholder="¿De qué trata? ¿Cuándo usarlo?"></div>
       <div><label class="etiqueta">Archivo * (PDF recomendado)</label><input name="archivo" type="file" required accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="campo file:mr-3 file:rounded-lg file:border-0 file:bg-marca-50 file:px-3 file:py-1 file:text-marca-700 file:font-semibold"></div>
     </form>`,
-    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-manual" class="btn-primario"><i data-lucide="upload" class="w-4 h-4"></i>Subir</button>`
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-manual-ayuda" class="btn-primario"><i data-lucide="upload" class="w-4 h-4"></i>Subir</button>`
   });
 }
 
-async function guardarManual() {
-  const f = $('#f-manual');
+async function guardarManualAyuda() {
+  const f = $('#f-manual-ayuda');
   if (!f.reportValidity()) return;
   try {
     cargando(true, 'Preparando archivo…');
@@ -4055,7 +4677,7 @@ async function borrarManual(id) {
 /* ======================= 17c. APP INSTALABLE Y COMPARTIR ======================= */
 let eventoInstalar = null;
 const esStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function mostrarBotonesInstalar() {
   const ver = !esStandalone() && (!!eventoInstalar || esIOS());
   $$('.instalar-app').forEach(b => b.classList.toggle('hidden', !ver));
@@ -4113,7 +4735,7 @@ function imprimirModal() {
 /* ======================= 19. EVENTOS ======================= */
 const ACC = {
   'nav': d => navegar(d.sec),
-  'salir': () => cerrarSesion(),
+  'salir': async () => { await desactivarNotificaciones({ silencioso: true }).catch(() => {}); cerrarSesion(); },
   'ir-panel': () => mostrarAdmin(),
   'marcar': d => marcar(d.tipo),
   'verificar-ubicacion': () => verificarUbicacion(false),
@@ -4192,7 +4814,21 @@ const ACC = {
   'reconocer-depto': d => reconocerDepto(d.depto, d.puntaje),
   'ver-eval': d => verEvaluacion(d.id),
   'nueva-tarea': d => formTarea(null, { fecha: d.f || '' }),
-  'ver-tarea': d => { if (S.plan) formTarea(d.id); },
+  'ver-tarea': d => { if (S.plan) formTarea(d.id, { grupo: !!d.grupo }); },
+  'ver-grupo': d => { if (S.plan) verGrupo(d.grupo || d.id); },
+  'editar-grupo': d => formTarea(d.id, { grupo: true }),
+  'aprobar-tarea': d => decidirPropuesta(d.id, true),
+  'no-aprobar-tarea': d => decidirPropuesta(d.id, false),
+  'proponer-tarea': () => formProponerTarea(),
+  'enviar-propuesta': () => enviarPropuesta(),
+  'retirar-mi-tarea': d => retirarMiTarea(d.id),
+  'notificaciones': () => abrirNotificaciones(),
+  'activar-notif': () => activarNotificaciones(),
+  'desactivar-notif': () => desactivarNotificaciones(),
+  'probar-notif': () => probarNotificacion(),
+  'oir-sonido': () => sonarNotificacion(true),
+  'notif-luego': () => { try { localStorage.setItem('aa_notif_luego', String(Date.now())); } catch (e) { /* nada */ } $('#mc-notif').classList.add('hidden'); },
+  'ir-notif': d => { cerrarModal(); if (d.ruta) { if (location.hash === d.ruta) entrarSegunRuta(); else location.hash = d.ruta; } },
   'guardar-tarea': () => guardarTareaForm(),
   'borrar-tarea': d => borrarTarea(d.id),
   'tarea-mover': d => moverTareaPaso(d.id, d.dir),
@@ -4217,7 +4853,7 @@ const ACC = {
   'ayuda-modal': () => abrirAyudaModal(),
   'ver-manual': d => verManual(d),
   'subir-manual': () => formManual(),
-  'guardar-manual': () => guardarManual(),
+  'guardar-manual-ayuda': () => guardarManualAyuda(),
   'borrar-manual': d => borrarManual(d.id)
 };
 
@@ -4226,6 +4862,13 @@ function prepararUI() {
   $('#version').textContent = VERSION;
   $$('.ver-app').forEach(e => { e.textContent = VERSION; });
   $('#foto-input').addEventListener('change', ev => abrirRecorte(ev.target.files[0]));
+  // Nombres, apellidos y cargos: mayúscula inicial al salir del campo ("diseñador" → "Diseñador")
+  document.addEventListener('focusout', ev => {
+    const i = ev.target;
+    if (!i.matches || !i.matches('input[name="Cargo"], input[name="Nombres"], input[name="Apellidos"]') || i.disabled) return;
+    const v = i.name === 'Cargo' ? capitalizarCargo(i.value) : capitalizarNombre(i.value);
+    if (v !== i.value) i.value = v;
+  });
   // Teléfonos: se ordenan al salir del campo (0412-1234567) y se marcan si son inválidos
   document.addEventListener('focusout', ev => {
     const i = ev.target;
@@ -4255,7 +4898,19 @@ function prepararUI() {
   $('#sol-todas').addEventListener('change', pintarSolicitudes);
   let t4, t5;
   $('#ta-buscar').addEventListener('input', () => { clearTimeout(t4); t4 = setTimeout(pintarTareas, 200); });
-  ['#ta-resp', '#ta-prio', '#ta-vencidas'].forEach(x => $(x).addEventListener('change', pintarTareas));
+  ['#ta-resp', '#ta-prio', '#ta-vencidas', '#ta-depto', '#ta-origen', '#ta-agrupar'].forEach(x => $(x).addEventListener('change', pintarTareas));
+  $('#modal-cuerpo').addEventListener('change', ev => {
+    cambioEstadoGrupo(ev);
+    const snd = ev.target.closest('[data-cambio="sonido"]');
+    if (snd) { try { localStorage.setItem('aa_sonido', snd.checked ? 'si' : 'no'); } catch (e) { /* nada */ } if (snd.checked) sonarNotificacion(true); }
+  });
+  escucharServiceWorker();
+  // Cumpleaños: volver a la app después de 15 minutos cuenta como "abrirla" de nuevo
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { S.ocultaDesde = Date.now(); return; }
+    if (S.ocultaDesde && Date.now() - S.ocultaDesde > 15 * 60000) S.cumpleCelebrado = false;
+    if (S.sesion && Date.now() - (S.sesionT || 0) < 5 * 60000) celebrarAlAbrir();
+  });
   $('#cv-buscar').addEventListener('input', () => { clearTimeout(t5); t5 = setTimeout(pintarCurriculums, 200); });
   ['#cv-estado', '#cv-estrellas', '#cv-depto'].forEach(x => $(x).addEventListener('change', pintarCurriculums));
   $('#rg-buscar').addEventListener('keydown', ev => { if (ev.key === 'Enter') cargarRegistro(); });
