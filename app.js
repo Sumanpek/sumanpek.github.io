@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.3.0 — Fase 3)
+ *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.3.1 — Fase 3)
  *  © 2026 Anabel Martínez RRHH — Todos los derechos de creación reservados.
  *  Solución personalizada para Sumanpek, C.A.
  * ==========================================================================
@@ -15,7 +15,7 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '3.3.0';
+const VERSION = '3.3.1';
 const APP_NOMBRE = 'Asistencia Sumanpek, C.A.';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -2210,44 +2210,138 @@ async function resolverSolicitud(id, decision) {
   } catch (e) { toast(e.message, 'error', 6000); }
 }
 
+/** Lunes a sábado de la última semana completa (un domingo, la que acaba de terminar). */
+function semanaAnterior() {
+  const hoy = hoyStr(), d = diaSemana(hoy);
+  const lunes = sumarDias(hoy, -(d - 1) - (d === 7 ? 0 : 7));
+  return { desde: lunes, hasta: sumarDias(lunes, 5) };
+}
+
+/** Días que se van a registrar en modo "varios días": del rango, solo los días de semana marcados, nunca domingo ni futuro. */
+function diasDelLote(form) {
+  const desde = form.desde.value, hasta = form.hasta.value;
+  const sem = new Set($$('[name=dsem]:checked', form).map(c => Number(c.value)));
+  if (!desde || !hasta || hasta < desde) return [];
+  const out = [];
+  for (let f = desde, n = 0; f <= hasta && n < 62; f = sumarDias(f, 1), n++) {
+    const d = diaSemana(f);
+    if (d !== 7 && sem.has(d) && f <= hoyStr()) out.push(f);
+  }
+  return out;
+}
+
+const diaCorto = f => aFecha(f).toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', month: 'short' });
+
 async function formMarcajeManual(id = null) {
   try { await asegurarCatalogo(); } catch (e) { return toast(e.message, 'error'); }
-  let a = { Fecha: hoyStr(), Entrada: '', Salida: '', Observacion: '' };
+  let a = { Fecha: hoyStr(), Entrada: '', Salida: '', Observacion: '', Justificativo: id ? '' : 'Autorización de RRHH' };
   if (id) {
     const todos = S.store ? S.store.asistencia : [];
     a = todos.find(x => x.ID === id) || a;
-  }
+  } else S.manualHechos = [];
   const activos = S.empleados.filter(e => e.Estado !== 'Inactivo').sort(ordenarNombre);
   const hora = h => (fmtHora(h) === '—' ? '' : fmtHora(h));
+  const sem = semanaAnterior();
+  const radio = (v, t, chk) => `<label class="cursor-pointer"><input type="radio" name="dias" value="${v}" class="peer sr-only" ${chk ? 'checked' : ''}>
+    <span class="block text-center rounded-xl border border-slate-300 px-2 py-2.5 text-xs font-semibold text-slate-600 peer-checked:bg-navy-900 peer-checked:text-white peer-checked:border-navy-900">${t}</span></label>`;
   abrirModal({
     titulo: id ? 'Corregir marcaje' : 'Registro manual de asistencia',
     cuerpo: `<form id="f-manual" class="space-y-4">
       <div><label class="etiqueta">Empleado *</label><select name="empleadoId" class="campo" required ${id ? 'disabled' : ''}>${opciones(activos.map(e => ({ v: e.ID, t: `${nombreCompleto(e)} · ${e.Departamento}` })), a.EmpleadoID || '', 'Selecciona…')}</select>
         ${id ? `<input type="hidden" name="empleadoId" value="${esc(a.EmpleadoID)}">` : ''}</div>
+      ${id ? '' : `<div><label class="etiqueta">¿Qué días?</label><div class="grid grid-cols-2 gap-2">${radio('uno', 'Un día', true)}${radio('varios', 'Varios días, mismo horario', false)}</div></div>
+      <div data-dias="varios" class="hidden space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="etiqueta">Desde *</label><input name="desde" type="date" class="campo" max="${hoyStr()}" value="${sem.desde}"></div>
+          <div><label class="etiqueta">Hasta *</label><input name="hasta" type="date" class="campo" max="${hoyStr()}" value="${sem.hasta}"></div>
+        </div>
+        <div><label class="etiqueta">Días de la semana</label>
+          <div class="flex flex-wrap gap-2">${['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((t, i) => `<label class="cursor-pointer"><input type="checkbox" name="dsem" value="${i + 1}" class="peer sr-only" checked>
+            <span class="block rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 peer-checked:bg-marca-600 peer-checked:text-white peer-checked:border-marca-600">${t}</span></label>`).join('')}</div>
+          <p class="text-xs text-slate-400 mt-1">Los domingos nunca se registran. Si el sábado tiene otro horario, desmárcalo y regístralo aparte.</p></div>
+        <p id="fm-resumen" class="text-sm font-semibold text-navy-900"></p>
+        <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" name="reemplazar" class="h-4 w-4 accent-[#C10866]"> Reemplazar los días que ya tengan marcaje (si no, se respetan)</label>
+      </div>`}
       ${camposMarcajeHTML({ conModo: false, fecha: a.Fecha, entrada: hora(a.Entrada), salida: hora(a.Salida), justificativo: a.Justificativo || '',
         detalle: String(a.Observacion || '').replace(/\s*\((registrado|solicitado|por) .+\)$/, ''), etiquetaDetalle: 'Observación' })}
       <p class="text-xs text-slate-500">Como RRHH puedes registrar cualquier fecha pasada. Si ya existe un marcaje ese día, se corregirá. Queda en la auditoría.</p>
+      ${id ? '' : `<label class="flex items-center gap-2 rounded-xl bg-navy-50 px-4 py-3 text-sm font-semibold text-navy-900"><input type="checkbox" name="seguir" checked class="h-4 w-4 accent-[#C10866]"> Mantener la ventana abierta para seguir registrando</label>
+      <div id="fm-hechos" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"></div>`}
     </form>`,
-    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-manual" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">${id ? 'Cancelar' : 'Cerrar'}</button><button data-acc="guardar-manual" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Guardar</button>`
   });
   const form = $('#f-manual');
   form.entrada.required = true;
-  if (id) form.fecha.readOnly = true;
+  if (id) { form.fecha.readOnly = true; return; }
+  const cajaFecha = form.fecha.closest('div');
+  const ajustar = () => {
+    const varios = form.querySelector('[name=dias]:checked').value === 'varios';
+    $('[data-dias=varios]', form).classList.toggle('hidden', !varios);
+    cajaFecha.classList.toggle('hidden', varios);
+    form.fecha.required = !varios;
+    form.desde.required = form.hasta.required = varios;
+    const dias = diasDelLote(form), r = $('#fm-resumen');
+    r.className = 'text-sm font-semibold ' + (dias.length ? 'text-navy-900' : 'text-rose-600');
+    r.textContent = !form.desde.value || !form.hasta.value ? 'Elige el rango de fechas.'
+      : form.hasta.value < form.desde.value ? 'La fecha final debe ser igual o posterior a la inicial.'
+      : !dias.length ? 'Ningún día del rango coincide (o son fechas futuras).'
+      : dias.length > 31 ? `Son ${dias.length} días: el máximo es 31 por registro.`
+      : `Se registrarán ${dias.length} ${dias.length === 1 ? 'día' : 'días'}: ${dias.map(diaCorto).join(' · ')}`;
+  };
+  form.addEventListener('change', ajustar);
+  form.addEventListener('input', ev => { if (ev.target.type === 'date') ajustar(); });
+  ajustar();
 }
 
 async function guardarManual() {
   const form = $('#f-manual');
   if (!form.reportValidity()) return;
-  const d = { empleadoId: form.querySelector('[name=empleadoId]:not([disabled])')?.value || form.empleadoId.value, fecha: form.fecha.value,
-    entrada: form.entrada.value, salida: form.salida.value, justificativo: form.justificativo.value, observacion: form.detalle.value.trim() };
+  const sel = form.querySelector('[name=empleadoId]:not([disabled])') || form.empleadoId;
+  const empId = sel.value || (form.querySelector('input[name=empleadoId]') || {}).value;
+  const varios = form.querySelector('[name=dias]:checked')?.value === 'varios';
+  const d = { empleadoId: empId, entrada: form.entrada.value, salida: form.salida.value, justificativo: form.justificativo.value, observacion: form.detalle.value.trim() };
+  if (varios) {
+    const dias = diasDelLote(form);
+    if (!dias.length || dias.length > 31) return toast($('#fm-resumen').textContent, 'aviso', 6000);
+    d.fechas = dias; d.reemplazar = !!form.reemplazar.checked;
+  } else d.fecha = form.fecha.value;
+  const seguir = !!form.seguir?.checked;
+  const emp = empPorId(empId), nombre = emp ? nombreCompleto(emp) : 'Empleado';
   try {
     cargando(true, 'Preparando soporte…');
     try { d.archivo = await archivoParaEnviar(form.archivo.files[0]); } finally { cargando(false); }
-    await api('marcajeManual', d, { texto: 'Guardando…' });
-    toast('Marcaje guardado.', 'ok');
-    cerrarModal(); invalidarCache();
+    const r = await api('marcajeManual', d, { texto: varios ? `Registrando ${d.fechas.length} días…` : 'Guardando…' });
+    invalidarCache();
+    let msg;
+    if (varios) {
+      const hechos = r.nuevos + r.corregidos;
+      const lista = r.omitidos.map(diaCorto).join(', ').replace(/\.$/, '');
+      msg = !hechos ? `${nombre}: ya tenía marcaje en ${r.omitidos.length === 1 ? 'ese día' : 'esos ' + r.omitidos.length + ' días'} (${lista}); no se cambió nada. Marca "Reemplazar" si quieres corregirlos.`
+        : `${nombre}: ${hechos} ${hechos === 1 ? 'día registrado' : 'días registrados'}` + (r.corregidos ? ` (${r.corregidos} reemplazado${r.corregidos === 1 ? '' : 's'})` : '') +
+          (r.omitidos.length ? `. ${r.omitidos.length} ya tenía${r.omitidos.length === 1 ? '' : 'n'} marcaje y no se ${r.omitidos.length === 1 ? 'tocó' : 'tocaron'}: ${lista}.` : '.');
+    } else msg = `Marcaje de ${nombre} guardado (${diaCorto(d.fecha)}).`;
+    toast(msg, r.omitidos?.length ? 'aviso' : 'ok', r.omitidos?.length ? 9000 : 4500);
+    if (!seguir) { cerrarModal(); if (S.seccion === 'asistencia') cargarAsistencia(true); return; }
+    // Ventana abierta: se conserva el horario. Varios días → se elige el siguiente empleado. Un día → mismo empleado, día siguiente.
+    form.archivo.value = '';
+    S.manualHechos.push(varios ? `${nombre} (${d.fechas.length} ${d.fechas.length === 1 ? 'día' : 'días'})` : `${nombre} · ${diaCorto(d.fecha)}`);
+    const caja = $('#fm-hechos');
+    caja.classList.remove('hidden');
+    caja.innerHTML = `<b>Registrados en esta ventana (${S.manualHechos.length}):</b><br>${S.manualHechos.map(esc).join('<br>')}`;
+    if (varios) {
+      const op = [...sel.options].find(o => o.value === empId);
+      if (op && !op.textContent.startsWith('✓ ')) op.textContent = '✓ ' + op.textContent;
+      sel.value = '';
+      sel.focus();
+    } else {
+      let sig = sumarDias(d.fecha, 1);
+      if (diaSemana(sig) === 7) sig = sumarDias(sig, 1);
+      if (sig <= hoyStr()) form.fecha.value = sig;
+      form.fecha.focus();
+    }
+    $('#modal-cuerpo').scrollTop = 0;
     if (S.seccion === 'asistencia') cargarAsistencia(true);
-  } catch (e) { toast(e.message, 'error', 6000); }
+  } catch (e) { toast(e.message, 'error', 7000); }
 }
 
 async function borrarAsistencia(id) {
@@ -4527,7 +4621,7 @@ function escucharServiceWorker() {
 
 /* ======================= 17n. REGISTRO DE ACTIVIDAD (solo lectura) ======================= */
 const CAT_REGISTRO = {
-  'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
+  'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_MANUAL_LOTE', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
   'Empleados y accesos': ['EMPLEADO_CREADO', 'EMPLEADO_EDITADO', 'EMPLEADOS_IMPORTADOS', 'FOTO_ACTUALIZADA', 'SOLICITUD_ACCESO', 'ACCESO_APROBADO', 'ACCESO_RECHAZADO', 'ACCESO_VINCULADO'],
   'Permisos y vacaciones': ['PERMISO_CREADO', 'PERMISO_EDITADO', 'PERMISO_ELIMINADO', 'PERMISO_SOLICITADO', 'PERMISO_ANULADO', 'PERMISO_APROBADO', 'PERMISO_RECHAZADO'],
   'Documentos y manuales': ['DOCUMENTO_SUBIDO', 'DOCUMENTO_ELIMINADO', 'MANUAL_SUBIDO', 'MANUAL_ELIMINADO'],
@@ -4543,7 +4637,7 @@ const COLOR_CAT = ['bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700', '
 const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJUSTES: 'Cambió ajustes', RESPALDO: 'Respaldo creado', EMPLEADO_DEL_MES: 'Empleado del mes',
   DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso',
   TAREA_PROPUESTA: 'Propuso una actividad', TAREA_APROBADA: 'Aprobó una actividad', TAREA_RECHAZADA: 'No aprobó una actividad', TAREA_RETIRADA: 'Retiró una actividad',
-  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos' };
+  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos', ASISTENCIA_MANUAL_LOTE: 'Registro manual de varios días' };
 const etiquetaAccion = a => ETIQUETA_ACCION[a] || (a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' '))
   .replace(/^Curriculum/, 'Currículum').replace(/^Evaluacion/, 'Evaluación').replace(/ dia/, ' día');
 const catDeAccion = a => Object.keys(CAT_REGISTRO).find(k => CAT_REGISTRO[k].includes(a)) || 'Otros';

@@ -10,7 +10,7 @@
  * - v3.3: notificaciones push. El aviso llega vacío; el teléfono pregunta al servidor qué mostrar
  *   usando la clave de este dispositivo (guardada en la caché "sumanpek-push").
  */
-const VERSION_SW = 'asistencia-sumanpek-3.3.0';
+const VERSION_SW = 'asistencia-sumanpek-3.3.1';
 const PUSH_CACHE = 'sumanpek-push';
 const BASICOS = ['./', 'index.html', 'logo.png', 'icono-192.png', 'icono-512.png', 'manifest.webmanifest', 'insignia-notif.png', 'notificacion.mp3'];
 const CDN = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];

@@ -371,7 +371,7 @@
         <div id="mc-historial" class="divide-y divide-slate-100"></div>
       </div>
       <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.<br>
-        Asistencia Sumanpek, C.A. v<span class="ver-app">3.3.0</span> · © Anabel Martínez RRHH</p>
+        Asistencia Sumanpek, C.A. v<span class="ver-app">3.3.1</span> · © Anabel Martínez RRHH</p>
     </main>
   </section>
 
@@ -402,7 +402,7 @@
           <button data-acc="compartir-app" class="btn btn-sm flex-1 bg-white/10 text-white hover:bg-white/20"><i data-lucide="qr-code" class="w-4 h-4"></i>Compartir app</button>
           <button data-acc="instalar-app" class="instalar-app hidden btn btn-sm flex-1 bg-oro-400 text-navy-950 hover:bg-oro-300"><i data-lucide="download" class="w-4 h-4"></i>Instalar</button>
         </div>
-        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Asistencia Sumanpek, C.A. v<span class="ver-app">3.3.0</span><br>© Anabel Martínez RRHH</p>
+        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Asistencia Sumanpek, C.A. v<span class="ver-app">3.3.1</span><br>© Anabel Martínez RRHH</p>
       </div>
     </aside>
 
@@ -436,7 +436,7 @@
             <h2 class="text-2xl font-extrabold text-slate-900">Dashboard gerencial</h2>
             <p id="dash-subtitulo" class="text-sm text-slate-500">–</p>
           </div>
-          <div class="flex gap-2 no-print">
+          <div class="flex flex-wrap gap-2 no-print">
             <button data-acc="exportar" data-tabla="t-dash-emp" data-nombre="kpi_empleados" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar como CSV</button>
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
           </div>
@@ -514,7 +514,7 @@
             <h2 class="text-2xl font-extrabold text-slate-900">Empleados</h2>
             <p id="emp-subtitulo" class="text-sm text-slate-500">Expedientes digitales del personal</p>
           </div>
-          <div class="flex gap-2 no-print">
+          <div class="flex flex-wrap gap-2 no-print">
             <button data-acc="exportar" data-tabla="t-empleados" data-nombre="empleados" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar como CSV</button>
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
             <button data-acc="importar" class="btn-sec solo-rrhh"><i data-lucide="file-up" class="w-4 h-4"></i>Importar Excel</button>
@@ -549,7 +549,7 @@
             <h2 class="text-2xl font-extrabold text-slate-900">Control de asistencia</h2>
             <p id="asis-subtitulo" class="text-sm text-slate-500">–</p>
           </div>
-          <div class="flex gap-2 no-print">
+          <div class="flex flex-wrap gap-2 no-print">
             <button data-acc="reporte" class="btn-sec"><i data-lucide="file-text" class="w-4 h-4"></i>Reporte mensual (PDF)</button>
             <button data-acc="exportar" data-tabla="t-asistencia" data-nombre="asistencia" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar como CSV</button>
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
@@ -578,7 +578,7 @@
             <h2 class="text-2xl font-extrabold text-slate-900">Permisos y vacaciones</h2>
             <p class="text-sm text-slate-500">Reposos, permisos, faltas justificadas y saldo de vacaciones</p>
           </div>
-          <div class="flex gap-2 no-print">
+          <div class="flex flex-wrap gap-2 no-print">
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
             <button data-acc="nuevo-permiso" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Registrar permiso</button>
           </div>
@@ -618,7 +618,7 @@
             <h2 class="text-2xl font-extrabold text-slate-900">Evaluación de desempeño</h2>
             <p class="text-sm text-slate-500">Calificaciones periódicas de 0 a 100 por criterio</p>
           </div>
-          <div class="flex gap-2 no-print">
+          <div class="flex flex-wrap gap-2 no-print">
             <button data-acc="exportar" data-tabla="t-evaluaciones" data-nombre="evaluaciones" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar como CSV</button>
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
             <button data-acc="nueva-eval" class="btn-primario solo-rrhh"><i data-lucide="plus" class="w-4 h-4"></i>Nueva evaluación</button>
@@ -734,7 +734,7 @@
           <div><label class="etiqueta">Buscar</label><input id="rg-buscar" class="campo" placeholder="Texto en el detalle…"></div>
           <button data-acc="rg-aplicar" class="btn-primario"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Actualizar</button>
         </div>
-        <div id="rg-tabla"></div>
+        <div class="overflow-x-auto"><div id="rg-tabla"></div></div>
         <div class="flex justify-center mt-4"><button id="rg-mas" data-acc="rg-mas" class="btn-sec hidden">Cargar más</button></div>
       </section>
 
