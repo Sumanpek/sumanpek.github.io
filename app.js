@@ -15,9 +15,9 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '4.1.0';
+const VERSION = '4.1.2';
 /** Fecha y hora en que se terminó de desarrollar esta versión (se muestra en el aviso de actualización). */
-const VERSION_FECHA = '2026-11-10T17:30:00-04:00';
+const VERSION_FECHA = '2026-11-10T20:00:00-04:00';
 const APP_NOMBRE = 'Sumanpek App';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -6092,7 +6092,7 @@ Object.assign(ACC, {
   'enviar-constancia': () => enviarConstancia(),
   'aprobar-constancia': d => resolverConstancia(d.id, true),
   'rechazar-constancia': d => resolverConstancia(d.id, false),
-  'ver-constancia': d => abrirArchivo('descargarConstancia', d.id),
+  'ver-constancia': d => descargarConstancia(d.id),
   'ver-cedula-cv': d => abrirArchivoDoc('cedula', d.id),
   'copiar-portal': () => copiarPortal()
 });
@@ -6142,6 +6142,15 @@ function alertasDocumentosHTML(e) {
     <i data-lucide="id-card" class="w-3.5 h-3.5"></i>${avisos.map(x => `${x.st === 'vencido' ? 'La' : 'La'} ${x.doc === 'RIF' ? 'constancia de RIF' : x.doc} ${x.st === 'vencido' ? 'venció el' : 'vence el'} ${fmtFecha(x.f)}`).join(' · ')}</p>`;
 }
 
+/** Descarga la constancia con su nombre (Constancia_de_Trabajo_Nombre_Apellido_dd_mm_aaaa.pdf). */
+async function descargarConstancia(id) {
+  try {
+    const d = await api('descargarConstancia', { id }, { texto: 'Descargando constancia…' });
+    descargarBlob(new Blob([Uint8Array.from(atob(d.base64), c => c.charCodeAt(0))], { type: 'application/pdf' }), d.nombre);
+    toast('Constancia descargada: ' + d.nombre, 'ok');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
 /** Abre la cédula o el RIF adjuntos a una postulación. */
 async function abrirArchivoDoc(doc, id) {
   const ventana = window.open('', '_blank');
@@ -6162,7 +6171,8 @@ function prepararVentanasInicio() {
   S.ventanasInicio = [];
   let vista = '';
   try { vista = localStorage.getItem('aa_version_vista') || ''; } catch (e) { /* nada */ }
-  if (vista !== VERSION) S.ventanasInicio.push('version');
+  // El aviso sale cuando cambia la versión principal (4.1 → 4.2); las correcciones (4.1.1, 4.1.2) no lo repiten
+  if (vista.split('.').slice(0, 2).join('.') !== VERSION.split('.').slice(0, 2).join('.')) S.ventanasInicio.push('version');
   if (S.sesion.empleadoId && S.sesion.misEncuestasPendientes > 0) S.ventanasInicio.push('encuesta');
   setTimeout(siguienteVentanaInicio, 600);
 }
@@ -6205,7 +6215,7 @@ function mostrarAvisoVersion() {
       </div>
       <ul class="mt-5 space-y-2.5">${novedades.map(([i, t]) => `<li class="flex items-start gap-3 text-sm text-slate-700">
         <span class="h-8 w-8 shrink-0 rounded-lg bg-marca-50 text-marca-700 flex items-center justify-center"><i data-lucide="${i}" class="w-4 h-4"></i></span><span class="pt-1">${t}</span></li>`).join('')}</ul>
-      <a id="ver-novedades" href="novedades/v${esc(VERSION)}.pdf" target="_blank" rel="noopener" class="mt-5 flex items-center justify-center gap-2 rounded-xl border border-marca-200 bg-marca-50 px-4 py-3 text-sm font-bold text-marca-700 hover:bg-marca-100">
+      <a id="ver-novedades" href="novedades/v${esc(VERSION.split('.').slice(0, 2).join('.'))}.0.pdf" target="_blank" rel="noopener" class="mt-5 flex items-center justify-center gap-2 rounded-xl border border-marca-200 bg-marca-50 px-4 py-3 text-sm font-bold text-marca-700 hover:bg-marca-100">
         <i data-lucide="file-text" class="w-4 h-4"></i>Conoce más sobre esta actualización (PDF)</a>`,
     pie: '<button data-acc="version-ok" class="btn-primario w-full sm:w-auto">¡Entendido!</button>'
   });
