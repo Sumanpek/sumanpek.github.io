@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.3.1 — Fase 3)
+ *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.3.2 — Fase 3)
  *  © 2026 Anabel Martínez RRHH — Todos los derechos de creación reservados.
  *  Solución personalizada para Sumanpek, C.A.
  * ==========================================================================
@@ -15,7 +15,7 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '3.3.1';
+const VERSION = '3.3.2';
 const APP_NOMBRE = 'Asistencia Sumanpek, C.A.';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -200,7 +200,24 @@ function decodificarJWT(t) {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (e) { return null; }
 }
-const tokenVigente = t => { const p = decodificarJWT(t); return !!(p && p.exp * 1000 - Date.now() > 120000); };
+const tokenVigente = t => {
+  if (String(t || '').startsWith('S1.')) {   // sesión propia de la app (30 días)
+    try { const d = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); return Number(d.x) - Date.now() > 120000; } catch (e) { return false; }
+  }
+  const p = decodificarJWT(t); return !!(p && p.exp * 1000 - Date.now() > 120000);
+};
+/** La sesión se guarda en el teléfono (sobrevive a cerrar la app). Dura 30 días y se renueva sola con el uso. */
+function guardarToken(t) {
+  S.token = t;
+  try { localStorage.setItem('aa_sesion', t); sessionStorage.removeItem('aa_token'); } catch (e) { /* modo privado */ }
+}
+function olvidarToken() {
+  S.token = null;
+  try { localStorage.removeItem('aa_sesion'); sessionStorage.removeItem('aa_token'); } catch (e) { /* nada */ }
+}
+function leerToken() {
+  try { return localStorage.getItem('aa_sesion') || sessionStorage.getItem('aa_token'); } catch (e) { return null; }
+}
 
 /* ========================= 4. INTERFAZ BÁSICA ========================= */
 /** Igual que en el servidor: "mikkel peña DE la rosa" → "Mikkel Peña de la Rosa". */
@@ -377,7 +394,7 @@ async function api(action, payload = {}, { silencioso = false, texto = 'Cargando
       throw new Error('Respuesta inválida del servidor. Verifica la URL de la API y que la implementación tenga acceso "Cualquier persona".');
     }
     if (!j.ok) {
-      if (j.error === 'SESION_EXPIRADA') { cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'); throw new Error('Sesión expirada.'); }
+      if (j.error === 'SESION_EXPIRADA') { reautenticar(); throw new Error('Tu sesión venció y no se guardó la operación. Inicia sesión e inténtalo de nuevo.'); }
       if (j.error === 'NO_REGISTRADO') {
         if (S.sesion) {
           cerrarSesion('Tu acceso fue desactivado. Contacta a Recursos Humanos.');
@@ -437,8 +454,7 @@ function mostrarLogin(msg = '') {
 }
 
 async function alRecibirCredencial(token) {
-  S.token = token;
-  try { sessionStorage.setItem('aa_token', token); } catch (e) { /* modo privado */ }
+  guardarToken(token);
   await cargarSesion();
 }
 
@@ -459,6 +475,7 @@ async function cargarSesion() {
   try {
     S.sesion = await api('sesion', {}, { texto: 'Iniciando sesión…' });
     S.sesionT = Date.now();
+    if (S.sesion.tokenApp) guardarToken(S.sesion.tokenApp);
     if (verificarVersion()) return;
     entrarSegunRuta();
     actualizarCampana(S.sesion.notifNoLeidas || 0);
@@ -468,8 +485,7 @@ async function cargarSesion() {
   } catch (e) {
     if (e.codigo === 'NO_REGISTRADO') return mostrarAcceso();
     if (!S.token) return; // ya se mostró el mensaje en cerrarSesion
-    S.token = null;
-    try { sessionStorage.removeItem('aa_token'); } catch (x) { /* nada */ }
+    olvidarToken();
     mostrarLogin(e.message);
   }
 }
@@ -535,6 +551,7 @@ async function alVolverALaApp() {
   try {
     const s = await api('sesion', {}, { silencioso: true });
     S.sesion = s; S.sesionT = Date.now();
+    if (s.tokenApp) guardarToken(s.tokenApp);
     if (verificarVersion()) return;
     actualizarCampana(s.notifNoLeidas || 0);
     celebrarAlAbrir();
@@ -545,17 +562,16 @@ async function alVolverALaApp() {
 
 /** El token de Google dura 1 hora: al volver después de eso, se renueva con el inicio automático. */
 function reautenticar() {
-  S.token = null; S.sesion = null; S.store = null;
-  try { sessionStorage.removeItem('aa_token'); } catch (e) { /* nada */ }
+  olvidarToken(); S.sesion = null; S.store = null;
   cerrarModal();
-  mostrarLogin();
+  mostrarLogin('Tu sesión venció. Vuelve a iniciar sesión con Google.');
 }
 
 function cerrarSesion(msg = '') {
   S.token = null; S.sesion = null; S.store = null; S.versionDesigual = null;
   $('#franja-version').classList.add('hidden'); document.body.style.paddingTop = '';
   document.documentElement.style.setProperty('--franja', '0px'); S.catalogoListo = false; S.empleados = []; S.permisos = []; S.evaluaciones = [];
-  try { sessionStorage.removeItem('aa_token'); } catch (e) { /* nada */ }
+  olvidarToken();
   if (window.google?.accounts?.id) google.accounts.id.disableAutoSelect();
   Object.values(S.charts).forEach(c => c.destroy()); S.charts = {};
   cerrarModal();
@@ -951,15 +967,17 @@ function pintarEstadoMarcaje(bloqueado = false) {
 
 function obtenerPosicion(precisionObjetivo, maxMs = 15000) {
   return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error('Este navegador no permite obtener la ubicación.'));
+    if (!navigator.geolocation) return reject(Object.assign(new Error('Este navegador no permite obtener la ubicación.'), { gps: true }));
     let mejor = null, fin = false, id = null, t = null;
     const terminar = err => {
       if (fin) return;
       fin = true;
       if (id !== null) navigator.geolocation.clearWatch(id);
       clearTimeout(t);
-      if (mejor) resolve(mejor);
-      else reject(err || new Error('No se pudo obtener tu ubicación. Activa el GPS e inténtalo de nuevo.'));
+      if (mejor) return resolve(mejor);
+      const e2 = err || new Error('No se pudo obtener tu ubicación. Activa el GPS e inténtalo de nuevo.');
+      e2.gps = true;
+      reject(e2);
     };
     t = setTimeout(() => terminar(), maxMs);
     const mensajes = {
@@ -1006,9 +1024,8 @@ async function marcar(tipo) {
     const p = await obtenerPosicion(g.precisionMax, 15000);
     const { latitude: lat, longitude: lng, accuracy } = p.coords;
     const d = Math.round(distanciaMetros(lat, lng, g.lat, g.lng));
-    if (accuracy > g.precisionMax) throw new Error(`Señal GPS imprecisa (±${Math.round(accuracy)} m). Activa la ubicación precisa y vuelve a intentar.`);
-    if (d > g.radio) throw new Error(`Estás a ${d} m de la empresa. Debes estar a menos de ${g.radio} m para marcar.`);
-    pintarGeo(`Ubicación verificada · ${d} m`, 'ok');
+    pintarGeo(`Ubicación obtenida · ${d} m de la empresa (±${Math.round(accuracy)} m)`, d <= g.radio && accuracy <= g.precisionMax ? 'ok' : 'aviso');
+    // El servidor valida distancia y precisión y deja constancia de cada rechazo en el registro de actividad
     const r = await api('marcar', { tipo, lat, lng, precision: accuracy }, { texto: tipo === 'ENTRADA' ? 'Registrando entrada…' : 'Registrando salida…' });
     S.sesion.marcajeHoy = r.registro;
     const extra = tipo === 'ENTRADA'
@@ -1018,8 +1035,10 @@ async function marcar(tipo) {
     if (navigator.vibrate) navigator.vibrate(150);
     cargarHistorial();
   } catch (e) {
-    pintarGeo(e.message, 'error');
-    toast(e.message, 'error', 7000);
+    const msg = `No se registró tu ${tipo === 'ENTRADA' ? 'entrada' : 'salida'}. ${e.message}`;
+    pintarGeo(msg, 'error');
+    toast(msg, 'error', 9000);
+    if (e.gps && S.token) api('intentoMarcaje', { tipo, motivo: e.message }, { silencioso: true }).catch(() => {});
   } finally {
     if (S.sesion) pintarEstadoMarcaje(false);
   }
@@ -4621,7 +4640,7 @@ function escucharServiceWorker() {
 
 /* ======================= 17n. REGISTRO DE ACTIVIDAD (solo lectura) ======================= */
 const CAT_REGISTRO = {
-  'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_MANUAL_LOTE', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
+  'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'MARCAJE_FALLIDO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_MANUAL_LOTE', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
   'Empleados y accesos': ['EMPLEADO_CREADO', 'EMPLEADO_EDITADO', 'EMPLEADOS_IMPORTADOS', 'FOTO_ACTUALIZADA', 'SOLICITUD_ACCESO', 'ACCESO_APROBADO', 'ACCESO_RECHAZADO', 'ACCESO_VINCULADO'],
   'Permisos y vacaciones': ['PERMISO_CREADO', 'PERMISO_EDITADO', 'PERMISO_ELIMINADO', 'PERMISO_SOLICITADO', 'PERMISO_ANULADO', 'PERMISO_APROBADO', 'PERMISO_RECHAZADO'],
   'Documentos y manuales': ['DOCUMENTO_SUBIDO', 'DOCUMENTO_ELIMINADO', 'MANUAL_SUBIDO', 'MANUAL_ELIMINADO'],
@@ -4637,7 +4656,8 @@ const COLOR_CAT = ['bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700', '
 const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJUSTES: 'Cambió ajustes', RESPALDO: 'Respaldo creado', EMPLEADO_DEL_MES: 'Empleado del mes',
   DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso',
   TAREA_PROPUESTA: 'Propuso una actividad', TAREA_APROBADA: 'Aprobó una actividad', TAREA_RECHAZADA: 'No aprobó una actividad', TAREA_RETIRADA: 'Retiró una actividad',
-  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos', ASISTENCIA_MANUAL_LOTE: 'Registro manual de varios días' };
+  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos', ASISTENCIA_MANUAL_LOTE: 'Registro manual de varios días',
+  MARCAJE_FALLIDO: 'Marcaje fallido (GPS del teléfono)', SESIONES_CERRADAS: 'Se cerraron todas las sesiones' };
 const etiquetaAccion = a => ETIQUETA_ACCION[a] || (a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' '))
   .replace(/^Curriculum/, 'Currículum').replace(/^Evaluacion/, 'Evaluación').replace(/ dia/, ' día');
 const catDeAccion = a => Object.keys(CAT_REGISTRO).find(k => CAT_REGISTRO[k].includes(a)) || 'Otros';
@@ -5043,8 +5063,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
   iniciarGoogle();
-  let guardado = null;
-  try { guardado = sessionStorage.getItem('aa_token'); } catch (e) { /* nada */ }
+  const guardado = leerToken();
   if (guardado && tokenVigente(guardado)) { S.token = guardado; cargarSesion(); }
-  else mostrarLogin();
+  else { olvidarToken(); mostrarLogin(); }
 });
