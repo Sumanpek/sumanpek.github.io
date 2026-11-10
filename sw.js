@@ -1,5 +1,5 @@
 /**
- * Asistencia Sumanpek, C.A. · Service worker
+ * Sumanpek App · Service worker
  * © 2026 Anabel Martínez RRHH
  *
  * - Página y código (index.html, app.js): primero la red (sin usar la caché del navegador) y, si no hay
@@ -7,10 +7,11 @@
  * - Librerías (Tailwind, Chart.js, íconos, fuentes): copia guardada al instante y se actualiza por detrás.
  * - Imágenes y sonido propios: copia guardada.
  * - La API de Google (script.google.com) y el inicio de sesión NUNCA se guardan.
+ * - v4: los avisos de pedidos vibran más y permanecen visibles hasta tocarlos.
  * - v3.3: notificaciones push. El aviso llega vacío; el teléfono pregunta al servidor qué mostrar
  *   usando la clave de este dispositivo (guardada en la caché "sumanpek-push").
  */
-const VERSION_SW = 'asistencia-sumanpek-3.3.2';
+const VERSION_SW = 'sumanpek-app-4.1.0';
 const PUSH_CACHE = 'sumanpek-push';
 const BASICOS = ['./', 'index.html', 'logo.png', 'icono-192.png', 'icono-512.png', 'manifest.webmanifest', 'insignia-notif.png', 'notificacion.mp3'];
 const CDN = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
@@ -84,11 +85,13 @@ self.addEventListener('push', ev => {
     const visible = ventanas.some(c => c.visibilityState === 'visible');
     ventanas.forEach(c => c.postMessage({ tipo: 'push', nuevas }));
     let mostrar = nuevas;
-    if (!mostrar.length) mostrar = [ultima ? Object.assign({}, ultima, { repetida: true }) : { id: 'sumanpek', titulo: 'Asistencia Sumanpek', cuerpo: 'Tienes una novedad. Toca para verla.', ruta: '#/asistencia' }];
-    await Promise.all(mostrar.map(n => self.registration.showNotification(n.titulo || 'Asistencia Sumanpek', {
+    if (!mostrar.length) mostrar = [ultima ? Object.assign({}, ultima, { repetida: true }) : { id: 'sumanpek', titulo: 'Sumanpek App', cuerpo: 'Tienes una novedad. Toca para verla.', ruta: '#/asistencia' }];
+    await Promise.all(mostrar.map(n => self.registration.showNotification(n.titulo || 'Sumanpek App', {
       body: n.cuerpo || '', icon: 'icono-192.png', badge: 'insignia-notif.png', tag: n.id || 'sumanpek', renotify: !n.repetida,
       silent: visible || !!n.repetida,   // con la app abierta suena el sonido propio de Sumanpek (lo reproduce la página)
-      vibrate: [120, 60, 120], data: { ruta: n.ruta || '#/asistencia' }
+      // v4: los avisos de pedidos se quedan en pantalla hasta que la persona los toque
+      requireInteraction: n.tipo === 'PEDIDO' && !n.repetida,
+      vibrate: n.tipo === 'PEDIDO' ? [200, 80, 200, 80, 200] : [120, 60, 120], data: { ruta: n.ruta || '#/asistencia' }
     })));
   })());
 });

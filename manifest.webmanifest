@@ -1,7 +1,7 @@
 {
-  "name": "Asistencia Sumanpek, C.A.",
-  "short_name": "Asistencia",
-  "description": "Marcaje de asistencia y gestión de RRHH de Sumanpek, C.A. · © Anabel Martínez RRHH",
+  "name": "Sumanpek App",
+  "short_name": "Sumanpek",
+  "description": "Asistencia, RRHH y trabajo en equipo de Sumanpek, C.A. · © Anabel Martínez RRHH",
   "id": "/",
   "start_url": "/#/asistencia",
   "scope": "/",

@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- *  ASISTENCIA SUMANPEK, C.A. · Frontend  (v3.3.2 — Fase 3)
+ *  SUMANPEK APP · Frontend  (v4.1.0 — Fase 4)
  *  © 2026 Anabel Martínez RRHH — Todos los derechos de creación reservados.
  *  Solución personalizada para Sumanpek, C.A.
  * ==========================================================================
@@ -15,8 +15,10 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '3.3.2';
-const APP_NOMBRE = 'Asistencia Sumanpek, C.A.';
+const VERSION = '4.1.0';
+/** Fecha y hora en que se terminó de desarrollar esta versión (se muestra en el aviso de actualización). */
+const VERSION_FECHA = '2026-11-10T17:30:00-04:00';
+const APP_NOMBRE = 'Sumanpek App';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
 
@@ -68,7 +70,11 @@ const SECCIONES = [
   { id: 'evaluaciones', titulo: 'Desempeño', icono: 'award' },
   { id: 'tareas', titulo: 'Tareas', icono: 'square-kanban' },
   { id: 'agenda', titulo: 'Agenda', icono: 'calendar-range' },
+  { id: 'pedidos', titulo: 'Pedidos', icono: 'package' },
   { id: 'curriculums', titulo: 'Currículums', icono: 'file-user' },
+  { id: 'constancias', titulo: 'Constancias', icono: 'file-badge' },
+  { id: 'clima', titulo: 'Clima laboral', icono: 'smile' },
+  { id: 'indicadores', titulo: 'Indicadores históricos', icono: 'chart-line' },
   { id: 'registro', titulo: 'Registro de actividad', icono: 'scroll-text' },
   { id: 'ajustes', titulo: 'Ajustes', icono: 'settings' },
   { id: 'ayuda', titulo: 'Ayuda', icono: 'life-buoy' },
@@ -369,7 +375,8 @@ function barra(delta) {
 /** Acciones de solo lectura: se permiten aunque las versiones no coincidan. */
 const LECTURAS = new Set(['sesion', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
   'descargarDocumento', 'descargarSoporte', 'estadoAcceso', 'misPermisos', 'ajustes',
-  'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria', 'misNotificaciones', 'pushConfig']);
+  'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria', 'misNotificaciones', 'pushConfig',
+  'pedidos', 'encuestas', 'resultadosEncuesta', 'misEncuestas', 'misConstancias', 'constancias', 'descargarConstancia', 'descargarCedulaCV']);
 
 async function api(action, payload = {}, { silencioso = false, texto = 'Cargando…' } = {}) {
   if (S.versionDesigual && !LECTURAS.has(action)) {
@@ -466,7 +473,8 @@ function rutaHash() {
 function fijarHash(h) { if (location.hash !== h) history.replaceState(null, '', h); }
 function entrarSegunRuta() {
   const r = rutaHash();
-  if (!esGestion() || r.a === 'asistencia') return mostrarMarcaje();
+  if (TABS_EMP.includes(r.a)) return mostrarMarcaje(r.a);
+  if (!esGestion()) return mostrarMarcaje();
   if (r.a === 'gestion') { if (r.b) S.seccion = r.b; return mostrarAdmin(); }
   return esMovil() ? mostrarMarcaje() : mostrarAdmin();   // en el celular, directivos entran al marcaje
 }
@@ -478,6 +486,7 @@ async function cargarSesion() {
     if (S.sesion.tokenApp) guardarToken(S.sesion.tokenApp);
     if (verificarVersion()) return;
     entrarSegunRuta();
+    prepararVentanasInicio();
     actualizarCampana(S.sesion.notifNoLeidas || 0);
     celebrarAlAbrir();
     sincronizarPush();
@@ -538,7 +547,7 @@ function verificarVersion() {
 async function actualizarApp(mensaje = 'Actualizando…') {
   cargando(true, mensaje);
   try { const regs = await navigator.serviceWorker?.getRegistrations?.(); await Promise.all((regs || []).map(r => r.update().catch(() => {}))); } catch (e) { /* nada */ }
-  try { const ks = await caches.keys(); await Promise.all(ks.filter(k => k.startsWith('asistencia-sumanpek')).map(k => caches.delete(k))); } catch (e) { /* nada */ }
+  try { const ks = await caches.keys(); await Promise.all(ks.filter(k => (k.startsWith('asistencia-sumanpek') || k.startsWith('sumanpek-app'))).map(k => caches.delete(k))); } catch (e) { /* nada */ }
   location.reload();
 }
 
@@ -638,15 +647,16 @@ async function enviarAcceso() {
 }
 
 /* ======================= 7. MARCAJE DE ASISTENCIA ======================= */
-function mostrarMarcaje() {
+function mostrarMarcaje(tab = S.tabEmp || 'asistencia') {
   const s = S.sesion;
   mostrarVista('v-marcaje');
-  fijarHash('#/asistencia');
+  S.tabEmp = TABS_EMP.includes(tab) ? tab : 'asistencia';
+  fijarHash('#/' + S.tabEmp);
   $('#mc-nombre').textContent = s.nombre;
   $('#mc-cargo').textContent = [s.cargo, s.departamento].filter(Boolean).join(' · ') || s.email;
   pintarAvatarPropio();
   $('#mc-volver').classList.toggle('hidden', !esGestion());
-  $('#mc-horario').textContent = `${s.horario.entrada} – ${s.horario.salida} · sáb. hasta ${s.horario.salidaSabado}`;
+  $('#mc-horario').textContent = s.miHorarioTexto ? `especial · ${s.miHorarioTexto}` : `${s.horario.entrada} – ${s.horario.salida} · sáb. hasta ${s.horario.salidaSabado}`;
   $('#mc-dias-max').textContent = s.diasMaxManual;
   $('#mc-solicitar').classList.toggle('hidden', !s.empleadoId);
   pintarEstadoMarcaje();
@@ -657,9 +667,9 @@ function mostrarMarcaje() {
   cargarHistorial();
   cargarMisSolicitudes();
   cargarMisPermisos();
-  cargarMiAgenda();
   pintarAvisoNotificaciones();
   if (s.empleadoId) verificarUbicacion(true);
+  cambiarTabEmp(S.tabEmp, { primera: true });
   iconos();
 }
 
@@ -963,6 +973,7 @@ function pintarEstadoMarcaje(bloqueado = false) {
   el.innerHTML = html;
   bE.disabled = bloqueado || !puedeE;
   bS.disabled = bloqueado || !puedeS;
+  pintarPausasEmp();
 }
 
 function obtenerPosicion(precisionObjetivo, maxMs = 15000) {
@@ -1088,12 +1099,15 @@ function mostrarAdmin() {
   actualizarInsignia(s.accesosPendientes || 0, 'empleados');
   actualizarInsignia(s.permisosPendientes || 0, 'permisos');
   actualizarInsignia(s.tareasPorAprobar || 0, 'tareas');
+  actualizarInsignia(s.pedidosPorAutorizar || 0, 'pedidos');
+  actualizarInsignia(s.constanciasPendientes || 0, 'constancias');
+  actualizarInsignia(s.postulacionesNuevas || 0, 'curriculums');
   navegar(S.seccion === 'mi-marcaje' ? 'dashboard' : S.seccion);
 }
 
 function pintarSelectoresDepto() {
   const deptos = opciones(S.sesion.departamentos || [], '', 'Todos los departamentos');
-  ['#emp-depto', '#per-depto', '#ev-depto', '#dash-depto', '#asis-depto', '#cv-depto'].forEach(id => {
+  ['#emp-depto', '#per-depto', '#ev-depto', '#dash-depto', '#asis-depto', '#cv-depto', '#pd-depto', '#ih-depto'].forEach(id => {
     const el = $(id); if (!el) return;
     const v = el.value; el.innerHTML = deptos;
     if (v && (S.sesion.departamentos || []).includes(v)) el.value = v;
@@ -1102,9 +1116,9 @@ function pintarSelectoresDepto() {
 
 function construirNavegacion() {
   $('#nav-lateral').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${['asistencia', 'empleados', 'permisos', 'tareas'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${CON_INSIGNIA.includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
   $('#nav-movil-items').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${['asistencia', 'empleados', 'permisos', 'tareas'].includes(s.id) ? `<span data-insignia="${s.id}" class="hidden insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
+    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${CON_INSIGNIA.includes(s.id) ? `<span data-insignia="${s.id}" class="hidden insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
 }
 
 function actualizarInsignia(n, sec = 'asistencia') {
@@ -1121,7 +1135,8 @@ function navegar(sec) {
   $$('[data-acc="nav"]').forEach(b => b.classList.toggle('activo', b.dataset.sec === sec));
   ({ dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
      permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: cargarAjustes, tareas: cargarTareas,
-     agenda: cargarAgenda, curriculums: cargarCurriculums, registro: cargarRegistro, ayuda: cargarAyuda })[sec]();
+     agenda: cargarAgenda, curriculums: cargarCurriculums, registro: cargarRegistro, ayuda: cargarAyuda,
+     pedidos: cargarPedidosAdmin, clima: cargarClima, constancias: cargarConstanciasAdmin, indicadores: cargarIndicadores })[sec]();
   iconos();
 }
 
@@ -1240,7 +1255,8 @@ function redibujar() {
   if (!S.sesion || $('#v-admin').classList.contains('hidden')) return;
   const fn = { dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
     permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: () => {}, tareas: pintarTareas, agenda: pintarAgenda,
-    curriculums: pintarCurriculums, registro: () => {}, ayuda: () => {} }[S.seccion];
+    curriculums: pintarCurriculums, registro: () => {}, ayuda: () => {},
+    pedidos: pintarPedidosAdmin, clima: pintarClima, constancias: pintarConstanciasAdmin, indicadores: pintarIndicadores }[S.seccion];
   if (fn) fn();
 }
 
@@ -1284,7 +1300,6 @@ function resumir(filas) {
 }
 
 function calcularKPIs(empleados, asistencia, permisos, evaluaciones, desde, hasta) {
-  const lab = S.sesion.diasLaborables || [1, 2, 3, 4, 5, 6];
   const hoy = hoyStr();
   const ahora = new Date();
   const finHoy = minutos(diaSemana(hoy) === 6 ? S.sesion.horario.salidaSabado : S.sesion.horario.salida);
@@ -1297,6 +1312,7 @@ function calcularKPIs(empleados, asistencia, permisos, evaluaciones, desde, hast
   fechas.forEach(f => { diario[f] = { aTiempo: 0, tarde: 0, ausente: 0, justificado: 0 }; });
 
   const filas = empleados.map(e => {
+    const lab = diasLabDe(e);   // v4: cada persona con su horario (general o especial)
     const r = { e, esperados: 0, asistidos: 0, asistidosLab: 0, aTiempo: 0, tardes: 0, justificados: 0, ausencias: 0,
       pendientes: 0, sinSalida: 0, minRetraso: 0, minTrabajados: 0, minExtra: 0, fechasAusente: [] };
     const permE = aprobados.filter(p => p.EmpleadoID === e.ID);
@@ -1639,6 +1655,10 @@ function pintarAlertas(depto, q) {
   const item = (icono, color, titulo, detalle, id, acc = `data-acc="ver-expediente" data-id="${esc(id)}"`) => a.push({ icono, color, titulo, detalle, id, acc });
   (S.accesos || []).filter(x => x.Estado === 'Pendiente' && (!depto || x.Departamento === depto)).forEach(x =>
     item('user-plus', 'ambar', `Solicitud de acceso: ${x.Nombres} ${x.Apellidos}`, `${x.Departamento} · ${x.Email}`, '', 'data-acc="nav" data-sec="empleados"'));
+  const ses = S.sesion;
+  if (ses.pedidosPorAutorizar) item('package', 'ambar', `${ses.pedidosPorAutorizar} pedido${ses.pedidosPorAutorizar === 1 ? '' : 's'} por autorizar`, 'Ventas espera tu autorización para pasar a producción', '', 'data-acc="nav" data-sec="pedidos"');
+  if (ses.constanciasPendientes) item('file-badge', 'ambar', `${ses.constanciasPendientes} constancia${ses.constanciasPendientes === 1 ? '' : 's'} por aprobar`, 'Solicitadas desde la app', '', 'data-acc="nav" data-sec="constancias"');
+  if (ses.postulacionesNuevas) item('globe', 'marca', `${ses.postulacionesNuevas} postulación${ses.postulacionesNuevas === 1 ? '' : 'es'} nueva${ses.postulacionesNuevas === 1 ? '' : 's'} del portal`, 'Trabaja con nosotros', '', 'data-acc="nav" data-sec="curriculums"');
   S.solicitudes.filter(x => x.Estado === 'Pendiente' && ids.has(x.EmpleadoID)).forEach(x =>
     item('clipboard-pen', 'ambar', `Marcaje por aprobar: ${nombreCompleto(empPorId(x.EmpleadoID))}`, `${fmtFecha(x.Fecha)} · ${x.Justificativo}`, x.EmpleadoID, 'data-acc="nav" data-sec="asistencia"'));
 
@@ -1647,6 +1667,11 @@ function pintarAlertas(depto, q) {
     else if (e.FinContrato && e.FinContrato <= en30) item('file-clock', 'ambar', `Contrato por vencer: ${nombreCompleto(e)}`, `Vence el ${fmtFecha(e.FinContrato)}`, e.ID);
     const v = saldoVacaciones(e);
     if (v && v.pendientes >= 30) item('sun', 'azul', `Vacaciones acumuladas: ${nombreCompleto(e)}`, `${v.pendientes} días pendientes por disfrutar`, e.ID);
+    [['Cédula', e.CedulaVencimiento], ['RIF', e.RifVencimiento]].forEach(([doc, f]) => {
+      const st = estadoDoc(f);
+      if (st === 'vencido') item('id-card', 'rosa', `${doc} vencido: ${nombreCompleto(e)}`, `Venció el ${fmtFecha(f)}. Pide el documento actualizado.`, e.ID);
+      else if (st === 'por vencer') item('id-card', 'ambar', `${doc} por vencer: ${nombreCompleto(e)}`, `Vence el ${fmtFecha(f)}`, e.ID);
+    });
     if (!e.Email) item('mail-x', 'gris', `Sin correo registrado: ${nombreCompleto(e)}`, 'No podrá marcar asistencia', e.ID);
     const pc = proximoCumple(e, hoy);
     if (pc && pc.dias <= 15) item('cake', 'violeta', `Cumpleaños: ${nombreCompleto(e)} cumple ${pc.edad} años`, pc.dias === 0 ? '¡Hoy!' : `${fmtFecha(pc.fecha)} · ${cuando(pc.dias).toLowerCase()}`, e.ID);
@@ -1779,7 +1804,7 @@ function formEmpleado(id = null, { acceso = null, base = {}, cv = null } = {}) {
           ${/(E\d+)/.test(acceso.Nota) && /sin correo\)$/.test(acceso.Nota) ? `<button type="button" data-acc="vincular-acceso" data-id="${esc(acceso.ID)}" data-emp="${esc(acceso.Nota.match(/(E\d+)/)[1])}" class="btn btn-sm mt-2 bg-white border border-navy-200 text-navy-900 hover:bg-navy-50"><i data-lucide="link" class="w-4 h-4"></i>Es la misma persona: vincular el correo a ${esc(acceso.Nota.match(/(E\d+)/)[1])}</button>`
             : '<p class="mt-1 text-xs text-amber-700">Ese expediente ya tiene su propio correo. Si es la misma persona, lo correcto es <b>rechazar</b> esta solicitud indicándole qué correo usar.</p>'}` : ''}
       </div>` : ''}
-      ${cv ? `<div class="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">Datos tomados del currículum de <b>${esc(cv.Nombres + ' ' + (cv.Apellidos || ''))}</b>. Completa el resto: al guardar, el currículum queda como <b>Contratado</b> y su archivo se copia al expediente.</div>` : ''}
+      ${cv ? `<div class="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">Datos tomados del currículum de <b>${esc(cv.Nombres + ' ' + (cv.Apellidos || ''))}</b>. Completa el resto: al guardar, el currículum queda como <b>Contratado</b> y sus archivos (currículum${cv && cv.CedulaFileID ? ', cédula y RIF' : ''}) se copian al expediente.${cv && cv.LecturaDocs ? `<br><b>Lectura de documentos:</b> ${esc(cv.LecturaDocs)}` : ''}</div>` : ''}
       <form id="f-empleado" class="space-y-6" autocomplete="off" ${acceso ? `data-acceso="${esc(acceso.ID)}"` : ''} ${cv ? `data-cv="${esc(cv.ID)}"` : ''}>
       <input type="hidden" name="ID" value="${esc(e.ID || '')}">
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Datos personales</legend>
@@ -1801,6 +1826,13 @@ function formEmpleado(id = null, { acceso = null, base = {}, cv = null } = {}) {
           <div data-si="egreso">${c('FechaEgreso', 'Fecha de egreso', 'date')}</div>
           ${s('Rol', 'Rol en el sistema', [{ v: 'EMPLEADO', t: 'Empleado (solo marcaje)' }, { v: 'DIRECCION', t: 'Dirección (ver todo)' }, { v: 'RRHH', t: 'RRHH (gestionar todo)' }])}
         </div></fieldset>
+      <fieldset><legend class="text-sm font-bold text-marca-700 mb-1">Documentos de identidad</legend>
+        <p class="text-xs text-slate-500 mb-3">Se llenan solos al subir la cédula o el RIF en PDF en "Documentos". Puedes corregirlos aquí.</p>
+        <div class="grid sm:grid-cols-3 gap-4">
+          ${c('CedulaExpedicion', 'Expedición de la cédula', 'date')}${c('CedulaVencimiento', 'Vencimiento de la cédula', 'date')}${c('RIF', 'RIF', 'text', 'placeholder="V-12345678-9" maxlength="14"')}
+          ${c('RifVencimiento', 'Vencimiento del RIF', 'date')}<div class="sm:col-span-2">${c('DomicilioFiscal', 'Domicilio fiscal (según el RIF)', 'text', 'maxlength="250"')}</div>
+        </div></fieldset>
+      ${camposHorarioHTML(e)}
       <fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Salud y datos complementarios</legend>
         <div class="grid sm:grid-cols-3 gap-4">
           ${s('TipoSangre', 'Tipo de sangre', OPC.sangre)}${s('EstadoCivil', 'Estado civil', OPC.civil)}${c('NumeroHijos', 'Número de hijos', 'number', 'min="0" step="1"')}
@@ -1825,12 +1857,14 @@ function formEmpleado(id = null, { acceso = null, base = {}, cv = null } = {}) {
   form.Estado.addEventListener('change', condicionales);
   form.TipoContrato.addEventListener('change', condicionales);
   condicionales();
+  prepararCamposHorario(form);
 }
 
 async function guardarEmpleado() {
   const form = $('#f-empleado');
   if (!form.reportValidity()) return;
   const datos = datosFormulario(form);
+  if (!leerCamposHorario(form, datos)) return;
   try {
     let r;
     if (form.dataset.acceso) {
@@ -1882,6 +1916,7 @@ async function verExpediente(id, tab = 'datos') {
           <div class="flex-1 min-w-0">
             <div class="flex flex-wrap items-center gap-2"><h4 class="text-xl font-extrabold text-slate-900">${esc(nombreCompleto(e))}</h4>${insigniaEstado(e.Estado)}</div>
             <p class="text-sm text-slate-500">${esc([e.Cargo, e.Departamento].filter(Boolean).join(' · '))} · <span class="font-mono text-xs">${esc(e.ID)}</span> · C.I. ${esc(e.Cedula)}</p>
+            ${alertasDocumentosHTML(e)}
             ${e.Alergias || e.CondicionesEspeciales ? `<p class="mt-1.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700"><i data-lucide="heart-pulse" class="w-3.5 h-3.5"></i>${esc([e.Alergias ? 'Alergias: ' + e.Alergias : '', e.CondicionesEspeciales ? 'Condición especial registrada' : ''].filter(Boolean).join(' · '))}</p>` : ''}
           </div>
           <div class="flex gap-2 no-print">
@@ -1930,13 +1965,19 @@ function expDatos({ empleado: e }) {
       ...(e.TipoContrato && e.TipoContrato !== 'Tiempo indeterminado' ? [campoLectura('Fin de contrato', e.FinContrato ? fmtFecha(e.FinContrato) : '')] : []),
       campoLectura('Salario semanal', e.SalarioSemanal ? fmtDinero(e.SalarioSemanal) : ''),
       ...(e.Estado === 'Inactivo' ? [campoLectura('Fecha de egreso', e.FechaEgreso ? fmtFecha(e.FechaEgreso) : '')] : []),
-      campoLectura('Rol en el sistema', esc(e.Rol))])}
+      campoLectura('Rol en el sistema', esc(e.Rol)),
+      campoLectura('Horario', textoHorario(e) ? `<span class="insignia bg-sky-50 text-sky-700">Especial</span> ${esc(textoHorario(e))}` : 'General de la empresa'),
+      ...(e.PuedeCrearPedidos === 'SI' ? [campoLectura('Pedidos de clientes', 'Puede crearlos')] : [])])}
     ${bloque('Salud y datos complementarios', [campoLectura('Tipo de sangre', esc(e.TipoSangre)),
       campoLectura('Alergias', e.Alergias ? `<span class="font-semibold text-rose-700">${esc(e.Alergias)}</span>` : ''),
       campoLectura('Condiciones especiales', e.CondicionesEspeciales ? `<span class="whitespace-pre-line">${esc(e.CondicionesEspeciales)}</span>` : ''),
       campoLectura('Estado civil', esc(e.EstadoCivil)), campoLectura('Número de hijos', esc(e.NumeroHijos)),
       campoLectura('Nivel de instrucción', esc(e.NivelInstruccion)),
       campoLectura('Tallas (camisa · pantalón · calzado)', [e.TallaCamisa, e.TallaPantalon, e.TallaCalzado].some(Boolean) ? esc([e.TallaCamisa || '—', e.TallaPantalon || '—', e.TallaCalzado || '—'].join(' · ')) : '')])}
+    ${bloque('Documentos de identidad', [campoLectura('Cédula', esc(e.Cedula)),
+      campoLectura('Expedición de la cédula', e.CedulaExpedicion ? fmtFecha(e.CedulaExpedicion) : ''),
+      campoLectura('Vencimiento de la cédula', fechaConEstado(e.CedulaVencimiento)), campoLectura('RIF', esc(e.RIF)),
+      campoLectura('Vencimiento del RIF', fechaConEstado(e.RifVencimiento)), campoLectura('Domicilio fiscal', esc(e.DomicilioFiscal))])}
     ${bloque('Contacto de emergencia', [campoLectura('Nombre', esc(e.EmergenciaNombre)), campoLectura('Teléfono', esc(e.EmergenciaTelefono)), campoLectura('Parentesco', esc(e.EmergenciaParentesco))])}
     ${e.Notas ? `<div class="tarjeta p-5"><h5 class="font-bold text-sm text-marca-700 mb-2">Notas internas</h5><p class="text-sm whitespace-pre-line">${esc(e.Notas)}</p></div>` : ''}
     <p class="text-xs text-slate-400">Creado: ${esc(e.Creado || '—')} · Última actualización: ${esc(e.Actualizado || '—')}</p>
@@ -2106,9 +2147,13 @@ async function subirDocumento(empId) {
     cargando(true, 'Preparando archivo…');
     let base64;
     try { base64 = await leerBase64(f); } finally { cargando(false); }
-    await api('subirDocumento', { empleadoId: empId, tipo: $('#doc-tipo').value, nombre: f.name, mimeType: f.type || 'application/octet-stream', base64, notas: $('#doc-notas').value.trim() }, { texto: 'Subiendo documento a Drive…' });
+    const tipo = $('#doc-tipo').value;
+    const leer = ['Cédula de identidad', 'RIF'].includes(tipo) && /pdf$/i.test(f.type || f.name);
+    const r = await api('subirDocumento', { empleadoId: empId, tipo, nombre: f.name, mimeType: f.type || 'application/octet-stream', base64, notas: $('#doc-notas').value.trim() },
+      { texto: leer ? 'Subiendo y leyendo el documento…' : 'Subiendo documento a Drive…' });
     toast('Documento guardado en el expediente.', 'ok');
-    verExpediente(empId, 'documentos');
+    if (r && r._lectura) toast(r._lectura.resumen + (Object.keys(r._lectura.cambios).length ? ' Se actualizó: ' + Object.keys(r._lectura.cambios).map(k => ETQ_DATO_DOC[k] || k).join(', ') + '.' : ''), /⚠️|No se pudieron/.test(r._lectura.resumen) ? 'aviso' : 'info', 12000);
+    verExpediente(empId, r && r._lectura ? 'datos' : 'documentos');
   } catch (e) { toast(e.message, 'error', 6000); }
 }
 
@@ -2180,6 +2225,7 @@ async function cargarAsistencia(forzar = false) {
     { t: 'Trabajado', v: a => a.MinTrabajados ? fmtMin(a.MinTrabajados) : '—', s: a => num(a.MinTrabajados), c: a => hCSV(a.MinTrabajados) },
     { t: 'Extra', v: a => num(a.MinExtra) > 0 || num(a.MinExtraBruto) > 0 ? `<b class="text-navy-700" title="${num(a.MinExtraBruto) !== num(a.MinExtra) ? esc(`Brutas: ${fmtMin(a.MinExtraBruto)} − retraso ${fmtMin(a.MinRetraso)}`) : ''}">${fmtMin(a.MinExtra)}</b>${num(a.MinExtraBruto) > num(a.MinExtra) ? '<span class="block text-[10px] text-slate-400">compensado</span>' : ''}` : '—', s: a => num(a.MinExtra), c: a => hCSV(a.MinExtra) },
     { t: 'Extra bruta', v: a => esc(a.MinExtraBruto), c: a => hCSV(a.MinExtraBruto), cls: 'hidden' },
+    { t: 'Pausas', v: a => num(a.MinPausa) > 0 ? `<button data-acc="ver-pausas" data-id="${esc(a.ID)}" class="insignia bg-sky-50 text-sky-700 whitespace-nowrap" title="Ver o quitar pausas">⏸ ${fmtMin(a.MinPausa)}</button>` : '—', s: a => num(a.MinPausa), c: a => hCSV(a.MinPausa) },
     { t: 'Ubicación', v: a => a.Origen === 'MANUAL' ? '<span class="text-xs text-slate-400">Manual</span>' : `<span class="text-xs text-slate-500 whitespace-nowrap">${a.DistEntrada ? esc(a.DistEntrada) + ' m' : '—'}${a.DistSalida ? ' / ' + esc(a.DistSalida) + ' m' : (a.Origen === 'GPS+MANUAL' ? ' / manual' : '')}</span>`, c: a => a.Origen === 'GPS' ? `${a.DistEntrada} m` : a.Origen },
     { t: 'Justificativo', v: a => insigniaJustificativo(a), s: a => a.Justificativo || '', c: a => a.Justificativo },
     { t: 'Observación', v: a => esc(a.Observacion), c: a => a.Observacion, cls: 'hidden' },
@@ -3014,7 +3060,7 @@ async function generarReporte() {
         <p class="text-[11px] text-slate-400">Generado el ${esc(new Date().toLocaleString('es-VE'))}</p></div></div>`;
   const chip = (t, v, c = 'text-slate-900') => `<div class="rounded-xl border border-slate-200 px-3 py-2"><p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">${t}</p><p class="text-lg font-extrabold ${c} tabular-nums">${v}</p></div>`;
   const pie = firmas => `<div class="rep-firma grid gap-10 mt-14" style="grid-template-columns:repeat(${firmas.length},minmax(0,1fr))">${firmas.map(f => `<div class="text-center"><div class="border-t border-slate-400 pt-1 text-xs text-slate-600">${esc(f)}</div></div>`).join('')}</div>
-      <p class="text-[10px] text-slate-400 mt-6 text-center">Asistencia Sumanpek, C.A. · © Anabel Martínez RRHH · ${hasta < fin ? `Datos hasta el ${esc(fmtFecha(hasta))} (mes en curso).` : 'Mes completo.'}</p>`;
+      <p class="text-[10px] text-slate-400 mt-6 text-center">Sumanpek App · © Anabel Martínez RRHH · ${hasta < fin ? `Datos hasta el ${esc(fmtFecha(hasta))} (mes en curso).` : 'Mes completo.'}</p>`;
 
   if (empId) {
     const e = empPorId(empId);
@@ -3311,7 +3357,7 @@ function pintarAjustes() {
         </div>
         <div class="mt-4 rounded-xl ${auto ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'} px-4 py-3 text-sm">
           ${auto ? `✅ Tareas automáticas activas: cierre diario a las <b>${esc(c.HORA_CIERRE)}:00</b> y respaldo cada domingo a las 3:00 a. m.`
-            : '⚠️ Las tareas automáticas no están activas. En la hoja de cálculo usa <b>Asistencia Sumanpek → Instalar / reparar estructura</b>.'}
+            : '⚠️ Las tareas automáticas no están activas. En la hoja de cálculo usa <b>Sumanpek App → Instalar / reparar estructura</b>.'}
           <span class="block text-xs mt-1 opacity-80">Último cierre: ${lc ? `${esc(fmtFecha(lc.Fecha))} · ${esc(lc.Presentes)} presentes, ${esc(lc.Ausentes)} ausentes, ${esc(lc.SinSalida)} sin salida` : 'todavía ninguno'}
             · Último respaldo: ${info.ultimoRespaldo ? esc(String(info.ultimoRespaldo).slice(0, 16)) : 'todavía ninguno'}</span>
         </div>
@@ -3321,6 +3367,7 @@ function pintarAjustes() {
           <button type="button" data-acc="aj-recalcular" class="btn-sec btn-sm"><i data-lucide="calculator" class="w-4 h-4"></i>Recalcular asistencia</button>
         </div>
       </div>
+      ${ajustesV4HTML(c, departamentos, campo, interruptor, dis)}
       <div class="tarjeta p-5">
         <h3 class="titulo-tarjeta mb-3">Apariencia de este dispositivo</h3>
         <div class="flex gap-2">
@@ -3344,6 +3391,7 @@ async function guardarAjustesForm() {
     if (el) cfg[k] = el.type === 'checkbox' ? (el.checked ? 'SI' : 'NO') : String(el.value).trim();
   });
   cfg.DIAS_LABORABLES = $$('[name=dia]:checked', f).map(i => i.value).join(',');
+  if ($('[name=pedDep]', f)) cfg.PEDIDOS_DEPARTAMENTOS = $$('[name=pedDep]:checked', f).map(i => i.value).join(', ');
   if (!cfg.DIAS_LABORABLES) return toast('Elige al menos un día laborable.', 'aviso');
   try {
     const r = await api('guardarAjustes', { config: cfg }, { texto: 'Guardando ajustes…' });
@@ -4304,13 +4352,14 @@ function pintarCurriculums() {
   const activos = todos.filter(c => !['Contratado', 'Descartado'].includes(c.Estado));
   $('#cv-resumen').innerHTML = [
     tarjetaKPI('inbox', 'Currículums', todos.length, `${activos.length} en proceso`, 'marca'),
-    tarjetaKPI('sparkles', 'Nuevos sin revisar', todos.filter(c => c.Estado === 'Nuevo').length, 'Estado "Nuevo"', 'azul'),
+    tarjetaKPI('sparkles', 'Nuevos sin revisar', todos.filter(c => c.Estado === 'Nuevo').length, `${todos.filter(c => c.Estado === 'Nuevo' && c.Fuente === 'Portal web').length} desde el portal web`, 'azul'),
     tarjetaKPI('star', '4 o 5 estrellas', todos.filter(c => num(c.Estrellas) >= 4).length, 'Candidatos destacados', 'ambar'),
     tarjetaKPI('user-check', 'Contratados', todos.filter(c => c.Estado === 'Contratado').length, 'Desde el banco de currículums', 'verde')
   ].join('');
   const rr = esRRHH();
   renderTabla('cv-tabla', 't-cv', [
-    { t: 'Candidato', v: c => `<button data-acc="editar-cv" data-id="${esc(c.ID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(c.Nombres + ' ' + (c.Apellidos || ''))}</button>
+    { t: 'Candidato', v: c => `<button data-acc="editar-cv" data-id="${esc(c.ID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${c.Nombres ? esc(c.Nombres + ' ' + (c.Apellidos || '')) : '<span class="text-amber-700">Por identificar</span>'}</button>
+        ${c.Fuente === 'Portal web' && c.LecturaDocs && !/^Datos leídos/.test(c.LecturaDocs) ? `<div class="text-[11px] text-amber-700 max-w-xs whitespace-normal">${esc(c.LecturaDocs)}</div>` : ''}
         <div class="text-xs text-slate-500">${esc(c.Cargo || 'Cargo no indicado')}</div>
         <div class="text-xs text-slate-400">${esc([c.Telefono, c.Email].filter(Boolean).join(' · '))}</div>`, s: c => c.Nombres + ' ' + c.Apellidos, c: c => (c.Nombres + ' ' + (c.Apellidos || '')).trim() },
     { t: 'Cargo', v: c => esc(c.Cargo), c: c => c.Cargo, cls: 'hidden' },
@@ -4319,13 +4368,18 @@ function pintarCurriculums() {
     { t: 'Cédula', v: c => esc(c.Cedula), c: c => c.Cedula, cls: 'hidden' },
     { t: 'Recibido', v: c => esc(fmtFecha(c.Recibido)), s: c => c.Recibido, c: c => c.Recibido },
     { t: 'Departamento', v: c => esc(c.Departamento || '—'), s: c => c.Departamento, c: c => c.Departamento },
-    { t: 'Fuente', v: c => `<span class="text-xs text-slate-500">${esc(c.Fuente || '—')}</span>`, c: c => c.Fuente },
+    { t: 'Fuente', v: c => c.Fuente === 'Portal web' ? '<span class="insignia bg-oro-100 text-oro-700">🌐 Portal web</span>' : `<span class="text-xs text-slate-500">${esc(c.Fuente || '—')}</span>`, c: c => c.Fuente },
+    { t: 'RIF', v: c => esc(c.RIF), c: c => c.RIF, cls: 'hidden' },
+    { t: 'Documentos', v: c => c.Fuente === 'Portal web' ? [fechaConEstado(c.CedulaVencimiento, 'Cédula'), fechaConEstado(c.RifVencimiento, 'RIF')].join('<br>') : '—', c: c => [c.CedulaVencimiento, c.RifVencimiento].join(' / '), cls: 'hidden' },
+    { t: 'Nacimiento', v: c => c.FechaNacimiento ? `${esc(fmtFecha(c.FechaNacimiento))} <span class="text-slate-400">(${edad(c.FechaNacimiento)})</span>` : '—', s: c => c.FechaNacimiento, c: c => c.FechaNacimiento, cls: 'hidden' },
     { t: 'Experiencia', v: c => c.Experiencia !== '' ? `${esc(c.Experiencia)} año${c.Experiencia === '1' ? '' : 's'}` : '—', s: c => num(c.Experiencia), c: c => c.Experiencia, cls: 'text-right' },
     { t: 'Pre-evaluación', v: c => estrellasHTML(c.ID, c.Estrellas, rr), s: c => num(c.Estrellas), c: c => c.Estrellas },
     { t: 'Estado', v: c => `<span class="insignia ${ESTILO_CV[c.Estado] || ''}">${esc(c.Estado)}</span>${c.EmpleadoID ? `<button data-acc="ver-expediente" data-id="${esc(c.EmpleadoID)}" class="block text-xs text-navy-700 hover:text-marca-700 mt-1">Expediente ${esc(c.EmpleadoID)}</button>` : ''}`, s: c => c.Estado, c: c => c.Estado },
     { t: 'Notas', v: c => esc(c.Notas), c: c => c.Notas, cls: 'hidden' },
     { t: '', v: c => `<div class="flex justify-end gap-1 no-print whitespace-nowrap">
         ${c.FileID ? `<button data-acc="ver-cv" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="Ver archivo"><i data-lucide="paperclip" class="w-4 h-4"></i></button>` : ''}
+        ${c.CedulaFileID ? `<button data-acc="ver-cedula-cv" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="Ver cédula"><i data-lucide="id-card" class="w-4 h-4"></i></button>` : ''}
+        ${c.RifFileID ? `<button data-acc="ver-rif-cv" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="Ver RIF"><i data-lucide="receipt-text" class="w-4 h-4"></i></button>` : ''}
         ${c.Estado !== 'Contratado' ? `<button data-acc="contratar-cv" data-id="${esc(c.ID)}" class="solo-rrhh btn-fantasma btn-sm text-emerald-700" title="Contratar: crear expediente"><i data-lucide="user-plus" class="w-4 h-4"></i></button>` : ''}
         <button data-acc="editar-cv" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="${rr ? 'Editar' : 'Ver'}"><i data-lucide="${rr ? 'pencil' : 'eye'}" class="w-4 h-4"></i></button>
         <button data-acc="borrar-cv" data-id="${esc(c.ID)}" class="solo-rrhh btn-fantasma btn-sm text-rose-600" title="Eliminar"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`, cls: 'text-right' }
@@ -4368,6 +4422,15 @@ function formCurriculum(id = null) {
           <div id="cv-form-estrellas" class="text-2xl">${estrellasHTML('form', c.Estrellas, rr)}</div></div>
         <div><label class="etiqueta">Estado</label><select name="Estado" class="campo" ${dis}>${opciones(S.cv.estados, c.Estado)}</select></div>
       </div>
+      ${c.Fuente === 'Portal web' ? `<div class="rounded-xl border border-slate-200 p-4 text-sm space-y-1">
+        <p class="font-semibold text-slate-800">Datos leídos de la cédula y el RIF</p>
+        ${c.LecturaDocs ? `<p class="text-xs ${/^Datos leídos/.test(c.LecturaDocs) ? 'text-slate-500' : 'text-amber-700'}">${esc(c.LecturaDocs)}</p>` : ''}
+        <div class="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-slate-600 mt-2">
+          <span>Nacimiento: <b>${c.FechaNacimiento ? esc(fmtFecha(c.FechaNacimiento)) + ' (' + edad(c.FechaNacimiento) + ' años)' : '—'}</b></span><span>RIF: <b>${esc(c.RIF || '—')}</b></span>
+          <span>Cédula vence: ${fechaConEstado(c.CedulaVencimiento)}</span><span>RIF vence: ${fechaConEstado(c.RifVencimiento)}</span>
+          <span class="sm:col-span-2">Domicilio fiscal: <b>${esc(c.DomicilioFiscal || '—')}</b></span></div>
+        <div class="flex flex-wrap gap-2 pt-2">${c.CedulaFileID ? `<button type="button" data-acc="ver-cedula-cv" data-id="${esc(c.ID)}" class="btn-sec btn-sm"><i data-lucide="id-card" class="w-4 h-4"></i>Ver cédula</button>` : ''}
+          ${c.RifFileID ? `<button type="button" data-acc="ver-rif-cv" data-id="${esc(c.ID)}" class="btn-sec btn-sm"><i data-lucide="receipt-text" class="w-4 h-4"></i>Ver RIF</button>` : ''}</div></div>` : ''}
       <div><label class="etiqueta">Notas (impresión, entrevista, referencias…)</label><textarea name="Notas" rows="3" maxlength="2000" class="campo" ${dis}>${esc(c.Notas || '')}</textarea></div>
       ${rr ? `<div><label class="etiqueta">Archivo del currículum (PDF, Word o foto)${c.FileNombre ? ` · actual: <b>${esc(c.FileNombre)}</b>` : ''}</label>
         <input name="archivo" type="file" accept=".pdf,.doc,.docx,image/*" class="campo file:mr-3 file:rounded-lg file:border-0 file:bg-marca-50 file:px-3 file:py-1 file:text-marca-700 file:font-semibold">
@@ -4418,6 +4481,8 @@ function contratarCV(id) {
   const c = S.cv.curriculums.find(x => x.ID === id);
   if (!c) return;
   formEmpleado(null, { cv: c, base: { Nombres: c.Nombres, Apellidos: c.Apellidos, Cedula: c.Cedula, Email: c.Email, Telefono: c.Telefono,
+    FechaNacimiento: c.FechaNacimiento || '', RIF: c.RIF || '', DomicilioFiscal: c.DomicilioFiscal || '', Direccion: c.DomicilioFiscal || '',
+    CedulaExpedicion: c.CedulaExpedicion || '', CedulaVencimiento: c.CedulaVencimiento || '', RifVencimiento: c.RifVencimiento || '',
     Departamento: (S.sesion.departamentos || []).includes(c.Departamento) ? c.Departamento : '', Cargo: c.Cargo, NivelInstruccion: c.NivelInstruccion } });
 }
 
@@ -4426,7 +4491,8 @@ const PUSH_CACHE = 'sumanpek-push';
 const PUSH_CFG_URL = () => new URL('__push_cfg', location.origin + location.pathname.replace(/[^/]*$/, '')).href;
 const ICONO_NOTIF = { TAREA: ['square-kanban', 'bg-sky-50 text-sky-700'], PERMISO: ['plane', 'bg-emerald-50 text-emerald-700'], MARCAJE: ['clock', 'bg-amber-50 text-amber-700'],
   AGENDA: ['calendar-days', 'bg-violet-50 text-violet-700'], RECONOCIMIENTO: ['trophy', 'bg-oro-100 text-oro-700'], ACCESO: ['user-plus', 'bg-marca-50 text-marca-700'],
-  CIERRE: ['alarm-clock', 'bg-rose-50 text-rose-700'], PRUEBA: ['bell-ring', 'bg-navy-50 text-navy-700'] };
+  CIERRE: ['alarm-clock', 'bg-rose-50 text-rose-700'], PRUEBA: ['bell-ring', 'bg-navy-50 text-navy-700'],
+  PEDIDO: ['package', 'bg-marca-50 text-marca-700'], ENCUESTA: ['smile', 'bg-emerald-50 text-emerald-700'] };
 
 const enModoApp = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 const soportaPush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && location.protocol === 'https:';
@@ -4555,7 +4621,7 @@ async function pintarEstadoPush() {
   if (!soportaPush()) {
     html = `<p class="text-sm text-slate-600">${esIOS() && !enModoApp() ? '📱 En iPhone, las notificaciones funcionan con la app instalada: toca <b>Compartir → "Agregar a inicio"</b> y ábrela desde ese ícono.' : 'Este navegador no admite notificaciones. Usa Chrome (Android o computadora) o la app instalada.'}</p>`;
   } else if (perm === 'denied') {
-    html = `<p class="text-sm text-slate-600">🔕 Las notificaciones están <b>bloqueadas</b> para esta página. Toca el ícono 🔒 junto a la dirección (o Ajustes → Apps → Asistencia Sumanpek → Notificaciones) y permítelas.</p>`;
+    html = `<p class="text-sm text-slate-600">🔕 Las notificaciones están <b>bloqueadas</b> para esta página. Toca el ícono 🔒 junto a la dirección (o Ajustes → Apps → Sumanpek App → Notificaciones) y permítelas.</p>`;
   } else if (perm === 'granted' && sub) {
     html = `<div class="flex flex-wrap items-center gap-2"><p class="flex-1 min-w-[180px] text-sm text-emerald-700 font-semibold">✅ Activas en este dispositivo</p>
       <button data-acc="probar-notif" class="btn-sec btn-sm"><i data-lucide="send" class="w-4 h-4"></i>Enviar una prueba</button>
@@ -4567,7 +4633,7 @@ async function pintarEstadoPush() {
   el.innerHTML = html + `<div class="mt-3 pt-3 border-t border-slate-200 flex flex-wrap items-center gap-2 text-sm">
       <label class="flex items-center gap-2 flex-1 min-w-[180px]"><input type="checkbox" data-cambio="sonido" class="h-4 w-4 accent-[#C10866]" ${sonidoActivo() ? 'checked' : ''}> Sonido de Sumanpek con la app abierta</label>
       <button data-acc="oir-sonido" class="btn-fantasma btn-sm"><i data-lucide="volume-2" class="w-4 h-4"></i>Escuchar</button></div>
-    ${/Android/i.test(navigator.userAgent) ? '<p class="mt-2 text-[11px] text-slate-400">Con la app cerrada, Android usa el sonido de notificación del teléfono. Si quieres este mismo sonido, <a href="notificacion.mp3" download="notificacion-sumanpek.mp3" class="underline">descárgalo</a> y elígelo en Ajustes → Apps → Asistencia Sumanpek → Notificaciones → Sonido.</p>' : ''}`;
+    ${/Android/i.test(navigator.userAgent) ? '<p class="mt-2 text-[11px] text-slate-400">Con la app cerrada, Android usa el sonido de notificación del teléfono. Si quieres este mismo sonido, <a href="notificacion.mp3" download="notificacion-sumanpek.mp3" class="underline">descárgalo</a> y elígelo en Ajustes → Apps → Sumanpek App → Notificaciones → Sonido.</p>' : ''}`;
   iconos();
 }
 
@@ -4631,7 +4697,8 @@ function escucharServiceWorker() {
         toast(n.titulo + (n.cuerpo ? ' · ' + n.cuerpo : ''), 'info', 7000);
       }
       actualizarCampana((S.sesion.notifNoLeidas || 0) + (m.nuevas || []).length);
-      if (!$('#v-marcaje').classList.contains('hidden')) cargarMiAgenda();
+      if (!$('#v-marcaje').classList.contains('hidden')) refrescarTabEmp();
+      if (S.seccion === 'pedidos' && !$('#v-admin').classList.contains('hidden')) cargarPedidosAdmin();
       if (S.seccion === 'tareas' && !$('#v-admin').classList.contains('hidden')) cargarTareas(true);
     }
     if (m.tipo === 'abrir' && m.ruta && S.sesion) { cerrarModal(); location.hash = m.ruta; }
@@ -4640,14 +4707,16 @@ function escucharServiceWorker() {
 
 /* ======================= 17n. REGISTRO DE ACTIVIDAD (solo lectura) ======================= */
 const CAT_REGISTRO = {
-  'Marcajes': ['ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'MARCAJE_FALLIDO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_MANUAL_LOTE', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
+  'Marcajes': ['PAUSA_REGISTRADA', 'PAUSA_ELIMINADA', 'ENTRADA', 'SALIDA', 'SOLICITUD_MARCAJE', 'SOLICITUD_APROBADA', 'SOLICITUD_RECHAZADA', 'MARCAJE_RECHAZADO', 'MARCAJE_FALLIDO', 'ASISTENCIA_MANUAL', 'ASISTENCIA_MANUAL_LOTE', 'ASISTENCIA_CORREGIDA', 'ASISTENCIA_ELIMINADA'],
   'Empleados y accesos': ['EMPLEADO_CREADO', 'EMPLEADO_EDITADO', 'EMPLEADOS_IMPORTADOS', 'FOTO_ACTUALIZADA', 'SOLICITUD_ACCESO', 'ACCESO_APROBADO', 'ACCESO_RECHAZADO', 'ACCESO_VINCULADO'],
   'Permisos y vacaciones': ['PERMISO_CREADO', 'PERMISO_EDITADO', 'PERMISO_ELIMINADO', 'PERMISO_SOLICITADO', 'PERMISO_ANULADO', 'PERMISO_APROBADO', 'PERMISO_RECHAZADO'],
-  'Documentos y manuales': ['DOCUMENTO_SUBIDO', 'DOCUMENTO_ELIMINADO', 'MANUAL_SUBIDO', 'MANUAL_ELIMINADO'],
+  'Documentos y manuales': ['DOCUMENTO_LEIDO', 'DOCUMENTO_SUBIDO', 'DOCUMENTO_ELIMINADO', 'MANUAL_SUBIDO', 'MANUAL_ELIMINADO'],
   'Desempeño y reconocimientos': ['EVALUACION_CREADA', 'EVALUACION_EDITADA', 'EVALUACION_ELIMINADA', 'EMPLEADO_DEL_MES', 'EMPLEADO_DEL_MES_QUITADO', 'DEPARTAMENTO_DEL_MES'],
   'Tareas y agenda': ['TAREA_CREADA', 'TAREA_EDITADA', 'TAREA_MOVIDA', 'TAREA_ELIMINADA', 'TAREA_PROPUESTA', 'TAREA_APROBADA', 'TAREA_RECHAZADA', 'TAREA_RETIRADA',
     'EVENTO_CREADO', 'EVENTO_EDITADO', 'EVENTO_ELIMINADO'],
-  'Currículums': ['CURRICULUM_REGISTRADO', 'CURRICULUM_EDITADO', 'CURRICULUM_CALIFICADO', 'CURRICULUM_ELIMINADO'],
+  'Pedidos': ['PEDIDO_CREADO', 'PEDIDO_EDITADO', 'PEDIDO_AUTORIZADO', 'PEDIDO_NO_AUTORIZADO', 'PEDIDO_TOMAR', 'PEDIDO_LISTO', 'PEDIDO_DEVOLVER', 'PEDIDO_AVISADO', 'PEDIDO_ENTREGADO', 'PEDIDO_CANCELAR'],
+  'Clima y constancias': ['ENCUESTA_CREADA', 'ENCUESTA_EDITADA', 'ENCUESTA_ELIMINADA', 'ENCUESTA_RESPONDIDA', 'CONSTANCIA_SOLICITADA', 'CONSTANCIA_EMITIDA', 'CONSTANCIA_RECHAZADA'],
+  'Currículums': ['POSTULACION_PORTAL', 'CURRICULUM_REGISTRADO', 'CURRICULUM_EDITADO', 'CURRICULUM_CALIFICADO', 'CURRICULUM_ELIMINADO'],
   'Ajustes y sistema': ['AJUSTES', 'DEPARTAMENTO_CREADO', 'DEPARTAMENTO_RENOMBRADO', 'DEPARTAMENTO_ACTIVADO', 'DEPARTAMENTO_DESACTIVADO', 'DEPARTAMENTO_ELIMINADO', 'RESPALDO',
     'NOTIFICACIONES_ACTIVADAS', 'NOTIFICACIONES_DESACTIVADAS', 'MIGRACION_CARGOS']
 };
@@ -4657,7 +4726,12 @@ const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJ
   DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso',
   TAREA_PROPUESTA: 'Propuso una actividad', TAREA_APROBADA: 'Aprobó una actividad', TAREA_RECHAZADA: 'No aprobó una actividad', TAREA_RETIRADA: 'Retiró una actividad',
   NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos', ASISTENCIA_MANUAL_LOTE: 'Registro manual de varios días',
-  MARCAJE_FALLIDO: 'Marcaje fallido (GPS del teléfono)', SESIONES_CERRADAS: 'Se cerraron todas las sesiones' };
+  MARCAJE_FALLIDO: 'Marcaje fallido (GPS del teléfono)', SESIONES_CERRADAS: 'Se cerraron todas las sesiones',
+  PAUSA_REGISTRADA: 'Registró una pausa', PAUSA_ELIMINADA: 'Quitó una pausa', PEDIDO_CREADO: 'Creó un pedido', PEDIDO_EDITADO: 'Editó un pedido',
+  PEDIDO_AUTORIZADO: 'Autorizó un pedido', PEDIDO_NO_AUTORIZADO: 'No autorizó un pedido', PEDIDO_TOMAR: 'Tomó un pedido', PEDIDO_LISTO: 'Terminó una etapa',
+  PEDIDO_DEVOLVER: 'Devolvió un pedido', PEDIDO_AVISADO: 'Avisó al cliente', PEDIDO_ENTREGADO: 'Entregó un pedido', PEDIDO_CANCELAR: 'Canceló un pedido',
+  POSTULACION_PORTAL: 'Postulación desde el portal', DOCUMENTO_LEIDO: 'Datos leídos de un documento', ENCUESTA_CREADA: 'Creó una encuesta', ENCUESTA_EDITADA: 'Editó una encuesta', ENCUESTA_ELIMINADA: 'Eliminó una encuesta',
+  ENCUESTA_RESPONDIDA: 'Respuesta anónima a una encuesta', CONSTANCIA_SOLICITADA: 'Pidió una constancia', CONSTANCIA_EMITIDA: 'Emitió una constancia', CONSTANCIA_RECHAZADA: 'Rechazó una constancia' };
 const etiquetaAccion = a => ETIQUETA_ACCION[a] || (a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' '))
   .replace(/^Curriculum/, 'Currículum').replace(/^Evaluacion/, 'Evaluación').replace(/ dia/, ' día');
 const catDeAccion = a => Object.keys(CAT_REGISTRO).find(k => CAT_REGISTRO[k].includes(a)) || 'Otros';
@@ -5013,6 +5087,7 @@ function prepararUI() {
   let t4, t5;
   $('#ta-buscar').addEventListener('input', () => { clearTimeout(t4); t4 = setTimeout(pintarTareas, 200); });
   ['#ta-resp', '#ta-prio', '#ta-vencidas', '#ta-depto', '#ta-origen', '#ta-agrupar'].forEach(x => $(x).addEventListener('change', pintarTareas));
+  $('#modal-cuerpo').addEventListener('input', ev => { if (ev.target.closest('[name=q_t]')) contarPreguntasEncuesta(); });
   $('#modal-cuerpo').addEventListener('change', ev => {
     cambioEstadoGrupo(ev);
     const snd = ev.target.closest('[data-cambio="sonido"]');
@@ -5067,3 +5142,1071 @@ document.addEventListener('DOMContentLoaded', () => {
   if (guardado && tokenVigente(guardado)) { S.token = guardado; cargarSesion(); }
   else { olvidarToken(); mostrarLogin(); }
 });
+
+/* =========================================================================
+ *  21. VERSIÓN 4
+ *  Horario especial · Pausas de la jornada · Pedidos entre departamentos ·
+ *  Encuestas de clima · Constancias · Indicadores históricos · Portal de empleo
+ * ========================================================================= */
+const TABS_EMP = ['asistencia', 'trabajo', 'tramites'];
+const CON_INSIGNIA = ['asistencia', 'empleados', 'permisos', 'tareas', 'pedidos', 'constancias', 'curriculums'];
+const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const URL_PORTAL = APP_URL + 'trabaja.html';
+
+/* ---------- Horario especial ---------- */
+/** Lee el horario especial guardado en el expediente (o null si usa el general). */
+function horarioEspecial(e) {
+  try { const h = JSON.parse(e && e.HorarioEspecial || 'null'); return h && typeof h === 'object' ? h : null; } catch (err) { return null; }
+}
+
+/** Días que le toca asistir a una persona: los suyos si tiene horario especial, si no los de la empresa. */
+function diasLabDe(e) {
+  const h = horarioEspecial(e);
+  return h && Array.isArray(h.d) && h.d.length ? h.d.map(Number) : (S.sesion.diasLaborables || [1, 2, 3, 4, 5, 6]);
+}
+
+/** "Entrada 07:30 · salida libre · Lun, Mar…" ('' si usa el horario general). */
+function textoHorario(e) {
+  const h = horarioEspecial(e);
+  if (!h) return '';
+  return `${h.e ? 'Entrada ' + h.e : 'Sin hora de entrada fija'} · ${h.s ? 'salida ' + h.s : 'salida libre'} · ${(h.d || []).map(d => DIAS_CORTOS[d - 1]).join(', ')}${h.x ? ' · cuenta horas extra' : ''}`;
+}
+
+/** Bloque del formulario de empleado: horario general o especial, y permiso para crear pedidos. */
+function camposHorarioHTML(e) {
+  const h = horarioEspecial(e) || { e: '', s: '', d: S.sesion.diasLaborables || [1, 2, 3, 4, 5], x: false };
+  const especial = !!horarioEspecial(e);
+  const chips = DIAS_CORTOS.map((d, i) => `<label class="cursor-pointer"><input type="checkbox" name="he_dia" value="${i + 1}" class="peer sr-only" ${(h.d || []).map(Number).includes(i + 1) ? 'checked' : ''}>
+    <span class="block rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 peer-checked:bg-navy-900 peer-checked:text-white peer-checked:border-navy-900">${d}</span></label>`).join('');
+  return `<fieldset><legend class="text-sm font-bold text-marca-700 mb-3">Horario y permisos especiales</legend>
+    <div class="grid sm:grid-cols-3 gap-4">
+      <div><label class="etiqueta">Horario</label><select name="he_tipo" class="campo">
+        <option value="general" ${especial ? '' : 'selected'}>General de la empresa</option><option value="especial" ${especial ? 'selected' : ''}>Especial (pasantes, mantenimiento…)</option></select></div>
+      <div data-si="he"><label class="etiqueta">Hora de entrada</label><input name="he_e" type="time" class="campo" value="${esc(h.e || '')}"><p class="text-[11px] text-slate-400 mt-1">Vacío = no se cuenta retraso.</p></div>
+      <div data-si="he"><label class="etiqueta">Hora de salida</label><input name="he_s" type="time" class="campo" value="${esc(h.s || '')}"><p class="text-[11px] text-slate-400 mt-1">Vacío = salida libre (sin extras).</p></div>
+      <div data-si="he" class="sm:col-span-2"><label class="etiqueta">Días que asiste</label><div class="flex flex-wrap gap-2">${chips}</div></div>
+      <label data-si="he" class="flex items-center gap-2 text-sm text-slate-600 self-end pb-2"><input type="checkbox" name="he_x" class="h-4 w-4 accent-[#C10866]" ${h.x ? 'checked' : ''}> Cuenta horas extra después de su salida</label>
+      <label class="sm:col-span-3 flex items-start gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer"><input type="checkbox" name="he_pedidos" class="mt-0.5 h-5 w-5 accent-[#C10866]" ${e.PuedeCrearPedidos === 'SI' ? 'checked' : ''}>
+        <span><span class="block text-sm font-semibold text-slate-800">Puede crear pedidos de clientes</span><span class="block text-xs text-slate-500">Además de los departamentos autorizados en Ajustes (por defecto, Ventas).</span></span></label>
+    </div>
+    <p data-si="he" class="text-xs text-slate-500 mt-2">Con horario especial no se descuenta nada por la jornada general: el retraso se mide con su propia hora de entrada y solo se cuentan ausencias en sus días.</p>
+  </fieldset>`;
+}
+
+/** Muestra u oculta los campos del horario especial según la opción elegida. */
+function prepararCamposHorario(form) {
+  const cambiar = () => $$('[data-si="he"]', form).forEach(x => x.classList.toggle('hidden', form.he_tipo.value !== 'especial'));
+  form.he_tipo.addEventListener('change', cambiar);
+  cambiar();
+}
+
+/** Convierte los campos del horario en los datos que espera el servidor. Devuelve false si falta algo. */
+function leerCamposHorario(form, datos) {
+  ['he_tipo', 'he_e', 'he_s', 'he_dia', 'he_x', 'he_pedidos'].forEach(k => delete datos[k]);
+  datos.PuedeCrearPedidos = form.he_pedidos.checked ? 'SI' : '';
+  if (form.he_tipo.value !== 'especial') { datos.HorarioEspecial = ''; return true; }
+  const dias = $$('[name=he_dia]:checked', form).map(i => Number(i.value));
+  if (!dias.length) { toast('Elige al menos un día de asistencia para el horario especial.', 'aviso'); return false; }
+  const e = form.he_e.value, s = form.he_s.value;
+  if (e && s && s <= e) { toast('En el horario especial, la salida debe ser posterior a la entrada.', 'aviso'); return false; }
+  datos.HorarioEspecial = JSON.stringify({ e, s, d: dias, x: form.he_x.checked && !!s });
+  return true;
+}
+
+/* ---------- Pestañas del autoservicio (Asistencia · Trabajo · Trámites) ---------- */
+/** Cambia de pestaña en la app del colaborador y carga lo que esa pestaña necesita. */
+function cambiarTabEmp(tab, { primera = false } = {}) {
+  S.tabEmp = TABS_EMP.includes(tab) ? tab : 'asistencia';
+  $$('[data-tab-emp]').forEach(x => x.classList.toggle('hidden', x.dataset.tabEmp !== S.tabEmp));
+  $$('.tab-emp').forEach(b => b.classList.toggle('activo', b.dataset.tab === S.tabEmp));
+  fijarHash('#/' + S.tabEmp);
+  pintarInsigniasEmp();
+  if (!primera) window.scrollTo(0, 0);
+  refrescarTabEmp();
+}
+
+/** Vuelve a cargar los datos de la pestaña visible. */
+function refrescarTabEmp() {
+  if (S.tabEmp === 'asistencia') { cargarHistorial(); cargarMisSolicitudes(); }
+  if (S.tabEmp === 'trabajo') { cargarPedidos(); cargarMiAgenda(); }
+  if (S.tabEmp === 'tramites') { cargarTramites(); cargarMisPermisos(); }
+}
+
+function pintarInsigniasEmp() {
+  const s = S.sesion || {};
+  const marca = (k, n) => $$(`[data-insignia-emp="${k}"]`).forEach(b => { b.textContent = n; b.classList.toggle('hidden', !n); });
+  marca('trabajo', s.misPedidosActivos || 0);
+  marca('tramites', s.misEncuestasPendientes || 0);
+}
+
+/* ---------- Pausas de la jornada ---------- */
+const leerPausas = t => { try { const p = JSON.parse(t || '[]'); return Array.isArray(p) ? p : []; } catch (e) { return []; } };
+
+/** En la tarjeta de marcaje: pausas de hoy registradas por RRHH (solo lectura; el personal no puede registrarlas). */
+function pintarPausasEmp() {
+  const el = $('#mc-pausas');
+  if (!el) return;
+  const r = S.sesion?.marcajeHoy;
+  const pausas = r && r.Entrada ? leerPausas(r.Pausas) : [];
+  if (!pausas.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  el.innerHTML = `<p class="text-xs font-semibold text-slate-500 mb-2">Pausas de hoy registradas por RRHH (no cuentan como trabajadas)</p>
+    <div class="space-y-1.5">${pausas.map(p => `<div class="flex items-center gap-2 rounded-lg bg-sky-50 text-sky-700 px-3 py-2 text-xs">
+      <i data-lucide="circle-pause" class="w-4 h-4 shrink-0"></i><span class="flex-1"><b>${esc(p[0])} – ${esc(p[1])}</b> · ${esc(String(p[2]).split(':')[0])}</span></div>`).join('')}</div>`;
+  iconos();
+}
+
+/** Campos comunes del formulario de pausa. */
+function camposPausaHTML({ fecha, min, max }) {
+  return `<div class="grid grid-cols-3 gap-3">
+      <div><label class="etiqueta">Fecha</label><input name="fecha" type="date" class="campo" value="${esc(fecha)}" min="${esc(min)}" max="${esc(max)}" required></div>
+      <div><label class="etiqueta">Desde</label><input name="desde" type="time" class="campo" required></div>
+      <div><label class="etiqueta">Hasta</label><input name="hasta" type="time" class="campo" required></div>
+    </div>
+    <div class="grid sm:grid-cols-2 gap-3 mt-3">
+      <div><label class="etiqueta">Motivo</label><select name="motivo" class="campo" required>${opciones(S.sesion.motivosPausa || [], 'Falla del servicio eléctrico')}</select></div>
+      <div><label class="etiqueta">Nota (opcional)</label><input name="nota" class="campo" maxlength="200" placeholder="Ej.: se fue la luz en todo el sector"></div>
+    </div>`;
+}
+
+
+
+/** RRHH registra la pausa a varias personas a la vez (por ejemplo, todo el personal que se fue por la falla eléctrica). */
+async function formPausaRRHH() {
+  const hoy = hoyStr();
+  abrirModal({
+    titulo: 'Registrar pausa del personal',
+    ancho: 'sm:max-w-2xl',
+    cuerpo: `<form id="f-pausa" data-rrhh="1" onsubmit="return false">
+      <p class="text-sm text-slate-600 mb-4">Para fallas eléctricas u otras salidas: el tiempo de la pausa se descuenta de las horas trabajadas de cada persona seleccionada. Cada una recibe un aviso en su teléfono.</p>
+      ${camposPausaHTML({ fecha: hoy, min: sumarDias(hoy, -400), max: hoy })}
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <label class="etiqueta mb-0">Personas que marcaron entrada ese día</label>
+        <div class="flex gap-2"><select id="pz-depto" class="campo w-auto py-1.5 text-sm">${opciones(S.sesion.departamentos || [], '', 'Todos los departamentos')}</select>
+          <button type="button" data-acc="pz-todos" class="btn-sec btn-sm">Seleccionar todos</button></div>
+      </div>
+      <div id="pz-lista" class="mt-2 rounded-xl border border-slate-200 max-h-72 overflow-y-auto scroll-fino divide-y divide-slate-100"><p class="p-4 text-sm text-slate-400 pulso">Cargando…</p></div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-pausa" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>Registrar pausa</button>`
+  });
+  const f = $('#f-pausa');
+  f.fecha.addEventListener('change', () => cargarPresentesPausa(f.fecha.value));
+  $('#pz-depto').addEventListener('change', () => $$('[data-pz-depto]').forEach(x => x.classList.toggle('hidden', !!$('#pz-depto').value && x.dataset.pzDepto !== $('#pz-depto').value)));
+  cargarPresentesPausa(hoy);
+}
+
+/** Lista de quienes marcaron entrada en la fecha elegida (para la pausa colectiva). */
+async function cargarPresentesPausa(fecha) {
+  const cont = $('#pz-lista');
+  if (!cont || !fecha) return;
+  cont.innerHTML = '<p class="p-4 text-sm text-slate-400 pulso">Cargando…</p>';
+  try {
+    const d = await api('datosPeriodo', { desde: fecha, hasta: fecha }, { silencioso: true });
+    const emps = new Map(d.empleados.map(e => [e.ID, e]));
+    const regs = d.asistencia.filter(a => a.Entrada).map(a => Object.assign({ _e: emps.get(a.EmpleadoID) || {} }, a))
+      .sort((a, b) => nombreCompleto(a._e).localeCompare(nombreCompleto(b._e), 'es'));
+    if (!$('#pz-lista')) return;
+    cont.innerHTML = regs.length ? regs.map(a => `<label data-pz-depto="${esc(a._e.Departamento || '')}" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50">
+        <input type="checkbox" name="pz_emp" value="${esc(a.EmpleadoID)}" class="h-4 w-4 accent-[#C10866]">
+        ${avatarHTML(a._e.FotoMini, nombreCompleto(a._e), 'h-8 w-8 text-[10px]')}
+        <span class="flex-1 min-w-0"><span class="block text-sm font-semibold text-slate-800 truncate">${esc(nombreCompleto(a._e))}</span>
+          <span class="block text-xs text-slate-500">${esc(a._e.Departamento || '')} · entrada ${fmtHora(a.Entrada)}${a.Salida ? ' · salida ' + fmtHora(a.Salida) : ''}${num(a.MinPausa) ? ' · ya tiene ' + fmtMin(a.MinPausa) + ' de pausa' : ''}</span></span></label>`).join('')
+      : '<p class="p-4 text-sm text-slate-400">Nadie marcó entrada ese día.</p>';
+    if ($('#pz-depto').value) $('#pz-depto').dispatchEvent(new Event('change'));
+  } catch (e) { cont.innerHTML = `<p class="p-4 text-sm text-rose-600">${esc(e.message)}</p>`; }
+}
+
+/** Envía la pausa (propia o colectiva) y muestra a quién no se le pudo registrar. */
+async function guardarPausa() {
+  const f = $('#f-pausa');
+  if (!f.reportValidity()) return;
+  const d = datosFormulario(f);
+  if (d.hasta <= d.desde) return toast('La pausa debe terminar después de empezar.', 'aviso');
+  const payload = { fecha: d.fecha, desde: d.desde, hasta: d.hasta, motivo: d.motivo, nota: d.nota };
+  if (f.dataset.rrhh) {
+    payload.empleadoIds = $$('[name=pz_emp]:checked', f).filter(i => !i.closest('.hidden')).map(i => i.value);
+    if (!payload.empleadoIds.length) return toast('Selecciona al menos una persona.', 'aviso');
+  }
+  try {
+    const r = await api('registrarPausa', payload, { texto: 'Registrando pausa…' });
+    if (r.registros.length) toast(`Pausa registrada a ${r.registros.length} persona${r.registros.length === 1 ? '' : 's'}.`, 'ok');
+    r.omitidos.forEach(o => toast('No se registró: ' + o, 'aviso', 9000));
+    const mia = r.registros.find(x => x.EmpleadoID === S.sesion.empleadoId && x.Fecha === hoyStr());   // RRHH también marca asistencia
+    if (mia) { S.sesion.marcajeHoy = mia; pintarEstadoMarcaje(); }
+    if (r.registros.length) { cerrarModal(); invalidarCache(); if (S.seccion === 'asistencia' && !$('#v-admin').classList.contains('hidden')) cargarAsistencia(true); }
+    if (!$('#v-marcaje').classList.contains('hidden')) cargarHistorial();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+/** RRHH: ver las pausas de un registro y quitar alguna. */
+function verPausas(id) {
+  const datos = Object.values(S.periodos || {}).map(p => p && p.asistencia || []).flat();
+  const a = datos.find(x => x.ID === id) || (S.tablas['t-asistencia']?.filas || []).find(x => x.ID === id);
+  if (!a) return toast('Registro no encontrado. Actualiza la página.', 'aviso');
+  const pausas = leerPausas(a.Pausas);
+  abrirModal({
+    titulo: `Pausas · ${nombreCompleto(empPorId(a.EmpleadoID))}`,
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<p class="text-sm text-slate-500 mb-3 cap1">${esc(fmtFechaCorta(a.Fecha))} · entrada ${fmtHora(a.Entrada)}${a.Salida ? ' · salida ' + fmtHora(a.Salida) : ''} · total de pausa: <b>${fmtMin(a.MinPausa)}</b></p>
+      <div class="space-y-2">${pausas.map((p, i) => `<div class="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3">
+        <i data-lucide="circle-pause" class="w-5 h-5 text-sky-600 shrink-0"></i>
+        <div class="flex-1 min-w-0"><p class="font-semibold text-slate-800">${esc(p[0])} – ${esc(p[1])}</p><p class="text-xs text-slate-500">${esc(p[2])}${p[3] ? ' · registrada por ' + esc(p[3]) : ''}</p></div>
+        <button data-acc="quitar-pausa" data-id="${esc(a.ID)}" data-i="${i}" class="solo-rrhh btn-fantasma btn-sm text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i>Quitar</button></div>`).join('')}</div>`,
+    pie: '<button data-acc="cerrar-modal" class="btn-primario">Cerrar</button>'
+  });
+}
+
+async function quitarPausa(id, i) {
+  if (!await confirmar('Ese tiempo volverá a contar como trabajado.', { titulo: '¿Quitar esta pausa?', boton: 'Quitar' })) return;
+  try {
+    const r = await api('eliminarPausa', { registroId: id, indice: Number(i) }, { texto: 'Quitando pausa…' });
+    toast('Pausa quitada.', 'ok');
+    if (S.sesion.marcajeHoy && S.sesion.marcajeHoy.ID === r.ID) { S.sesion.marcajeHoy = r; pintarEstadoMarcaje(); }
+    cerrarModal(); invalidarCache();
+    if (S.seccion === 'asistencia' && !$('#v-admin').classList.contains('hidden')) cargarAsistencia(true);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ---------- Pedidos de clientes ---------- */
+const ESTILO_PEDIDO = { 'Por autorizar': 'bg-violet-100 text-violet-700', 'En producción': 'bg-sky-100 text-sky-700', 'Listo para entregar': 'bg-emerald-100 text-emerald-700',
+  'Cliente avisado': 'bg-oro-100 text-oro-700', 'Entregado': 'bg-slate-200 text-slate-700', 'Cancelado': 'bg-rose-100 text-rose-700', 'No autorizado': 'bg-rose-100 text-rose-700' };
+const ESTILO_PRIORIDAD = { Urgente: 'bg-rose-100 text-rose-700', Alta: 'bg-amber-100 text-amber-700', Media: 'bg-sky-100 text-sky-700', Baja: 'bg-slate-200 text-slate-600' };
+const PEDIDO_ACTIVO = ['Por autorizar', 'En producción', 'Listo para entregar', 'Cliente avisado'];
+const ORDEN_PRIORIDAD = { Urgente: 0, Alta: 1, Media: 2, Baja: 3 };
+
+/** Trae los pedidos que puede ver la persona y vuelve a pintar las vistas abiertas. */
+async function cargarPedidos({ silencioso = true } = {}) {
+  try {
+    S.ped = await api('pedidos', {}, { silencioso });
+    if (S.sesion && S.sesion.empleadoId) {
+      S.sesion.misPedidosActivos = S.ped.pedidos.filter(x => pedidoEsMiTurno(x) || (x.Estado === 'Listo para entregar' && x.CreadoPor === S.sesion.email)).length;
+      pintarInsigniasEmp();
+    }
+    if (!$('#v-marcaje').classList.contains('hidden')) pintarPedidosEmp();
+    if (S.seccion === 'pedidos' && !$('#v-admin').classList.contains('hidden')) pintarPedidosAdmin();
+  } catch (e) {
+    const el = $('#mc-pedidos');
+    if (el && !$('#v-marcaje').classList.contains('hidden')) el.innerHTML = `<div class="tarjeta p-5 text-sm text-rose-600">${esc(e.message)}</div>`;
+    else toast(e.message, 'error');
+  }
+}
+
+const etapaActual = x => x.Etapas[x.EtapaActual] || null;
+/** ¿La etapa le corresponde a esta persona? (es la responsable o es de su departamento) */
+const esMiEtapa = et => !!et && !!S.sesion.empleadoId && normalizar(et.dep) === normalizar(S.sesion.departamento);
+const pedidoEsMiTurno = x => x.Estado === 'En producción' && esMiEtapa(etapaActual(x));
+
+/** Barra de etapas: Ventas → Diseño → Impresión → … → Cliente. */
+function etapasHTML(x) {
+  const color = (et, i) => {
+    if (x.Estado === 'Cancelado' || x.Estado === 'No autorizado') return 'bg-slate-200 text-slate-500';
+    if (et.estado === 'Listo') return 'bg-emerald-500 text-white';
+    if (i === x.EtapaActual && x.Estado === 'En producción') return et.estado === 'En proceso' ? 'bg-marca-700 text-white' : 'bg-oro-400 text-navy-950';
+    return 'bg-slate-200 text-slate-500';
+  };
+  const cerrado = ['Entregado'].includes(x.Estado), listo = ['Listo para entregar', 'Cliente avisado', 'Entregado'].includes(x.Estado);
+  const paso = (txt, cls, sub = '') => `<div class="flex flex-col items-center gap-1 min-w-[58px]"><span class="etapa-punto px-2 ${cls}">${txt}</span><span class="text-[10px] leading-tight text-center text-slate-500 max-w-[70px] truncate">${sub}</span></div>`;
+  const linea = '<span class="flex-1 h-0.5 min-w-[10px] bg-slate-200 mt-3"></span>';
+  return `<div class="flex items-start overflow-x-auto scroll-fino pb-1">${paso('V', 'bg-navy-900 text-white', 'Ventas')}${x.Etapas.map((et, i) => linea + paso(i + 1, color(et, i),
+    esc(et.dep))).join('')}${linea}${paso(cerrado ? '✓' : '👤', listo ? (cerrado ? 'bg-emerald-500 text-white' : 'bg-oro-400 text-navy-950') : 'bg-slate-200 text-slate-500', 'Cliente')}</div>`;
+}
+
+/** Botones de acción que corresponden a la persona según la etapa y su rol. */
+function accionesPedidoHTML(x) {
+  const s = S.sesion, rr = s.rol === 'RRHH', creador = x.CreadoPor === s.email, et = etapaActual(x), b = [];
+  const btn = (acc, txt, icono, cls = 'btn-sec', extra = '') => `<button data-acc="${acc}" data-id="${esc(x.ID)}" ${extra} class="${cls} btn-sm"><i data-lucide="${icono}" class="w-4 h-4"></i>${txt}</button>`;
+  if (x.Estado === 'Por autorizar' && rr) { b.push(btn('autorizar-pedido', 'Autorizar', 'check', 'btn-primario')); b.push(btn('no-autorizar-pedido', 'No autorizar', 'x')); }
+  if (x.Estado === 'En producción' && (rr || esMiEtapa(et))) {
+    if (et.estado === 'Pendiente') b.push(btn('mover-pedido', 'Tomar', 'hand', 'btn-sec', 'data-accion="tomar"'));
+    b.push(btn('mover-pedido', 'Listo: pasar a ' + (x.Etapas[x.EtapaActual + 1] ? x.Etapas[x.EtapaActual + 1].dep : 'Ventas'), 'circle-check', 'btn-primario', 'data-accion="listo"'));
+    if (x.EtapaActual > 0) b.push(btn('mover-pedido', 'Devolver', 'undo-2', 'btn-sec', 'data-accion="devolver"'));
+  }
+  if (x.Estado === 'Listo para entregar' && (creador || rr || s.puedeCrearPedidos)) b.push(btn('mover-pedido', 'Ya avisé al cliente', 'phone', 'btn-primario', 'data-accion="avisado"'));
+  if (['Listo para entregar', 'Cliente avisado'].includes(x.Estado) && (creador || rr || s.puedeCrearPedidos)) b.push(btn('mover-pedido', 'Entregado', 'package-check', x.Estado === 'Cliente avisado' ? 'btn-primario' : 'btn-sec', 'data-accion="entregado"'));
+  if (PEDIDO_ACTIVO.includes(x.Estado) && (creador || rr)) { b.push(btn('editar-pedido', 'Editar', 'pencil')); b.push(btn('mover-pedido', 'Cancelar', 'ban', 'btn-fantasma text-rose-600', 'data-accion="cancelar"')); }
+  return b.join('');
+}
+
+/** Tarjeta de un pedido (se usa en el teléfono y en el panel). */
+function tarjetaPedido(x) {
+  const et = etapaActual(x);
+  const vence = x.FechaLimite && PEDIDO_ACTIVO.includes(x.Estado) ? (x.FechaLimite < hoyStr() ? 'vencido' : x.FechaLimite <= sumarDias(hoyStr(), 2) ? 'pronto' : '') : '';
+  const turno = pedidoEsMiTurno(x);
+  return `<div class="tarjeta p-4 ${turno ? 'ring-2 ring-oro-400' : ''}">
+    <button data-acc="ver-pedido" data-id="${esc(x.ID)}" class="w-full text-left">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0"><p class="text-xs font-bold text-marca-700">${esc(x.Numero)}${turno ? ' · <span class="text-oro-700">¡Te toca!</span>' : ''}</p>
+          <p class="font-bold text-slate-900 truncate">${esc(x.Cliente)}</p></div>
+        <div class="flex flex-col items-end gap-1 shrink-0"><span class="insignia ${ESTILO_PEDIDO[x.Estado] || ''}">${esc(x.Estado)}</span><span class="insignia ${ESTILO_PRIORIDAD[x.Prioridad] || ''}">${esc(x.Prioridad)}</span></div>
+      </div>
+      <ul class="mt-2 text-sm text-slate-700 space-y-0.5">${x.Items.slice(0, 4).map(i => `<li><b class="tabular-nums">${esc(fmtNum(i.c))}</b> × ${esc(i.d)}</li>`).join('')}${x.Items.length > 4 ? `<li class="text-xs text-slate-400">y ${x.Items.length - 4} más…</li>` : ''}</ul>
+      <p class="mt-1 text-xs ${vence === 'vencido' ? 'text-rose-600 font-semibold' : vence === 'pronto' ? 'text-amber-600 font-semibold' : 'text-slate-500'}">
+        ${x.FechaLimite ? `Entrega: ${esc(fmtFechaCorta(x.FechaLimite))}${vence === 'vencido' ? ' (vencido)' : ''}` : 'Sin fecha de entrega'}${et && x.Estado === 'En producción' ? ` · En ${esc(et.dep)}${et.estado === 'En proceso' ? ' (en proceso)' : ''}` : ''}</p>
+      <div class="mt-3">${etapasHTML(x)}</div>
+    </button>
+    ${x.Estado === 'No autorizado' && x.Motivo ? `<p class="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><b>Motivo:</b> ${esc(x.Motivo)}</p>` : ''}
+    ${et && et.nota && x.Estado === 'En producción' ? `<p class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">${esc(et.nota)}</p>` : ''}
+    <div class="mt-3 flex flex-wrap gap-2 empty:hidden">${S.sesion.rol === 'DIRECCION' ? '' : accionesPedidoHTML(x)}</div>
+  </div>`;
+}
+
+/** Pestaña "Trabajo" del teléfono: pedidos con filtros rápidos. */
+function pintarPedidosEmp() {
+  const el = $('#mc-pedidos');
+  if (!el || !S.ped) return;
+  const lista = S.ped.pedidos;
+  const grupos = {
+    turno: lista.filter(pedidoEsMiTurno),
+    mios: lista.filter(x => x.CreadoPor === S.sesion.email && PEDIDO_ACTIVO.includes(x.Estado)),
+    activos: lista.filter(x => PEDIDO_ACTIVO.includes(x.Estado)),
+    cerrados: lista.filter(x => !PEDIDO_ACTIVO.includes(x.Estado))
+  };
+  if (!S.pedFiltro) S.pedFiltro = grupos.turno.length ? 'turno' : (S.ped.puedeCrear ? 'mios' : 'activos');
+  const etiquetas = { turno: 'Mi turno', mios: 'Creados por mí', activos: 'Todos activos', cerrados: 'Cerrados' };
+  const visibles = (grupos[S.pedFiltro] || []).slice().sort((a, b) => (ORDEN_PRIORIDAD[a.Prioridad] - ORDEN_PRIORIDAD[b.Prioridad]) || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9')));
+  el.innerHTML = `<div class="tarjeta">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div class="min-w-0"><h3 class="titulo-tarjeta">🧾 Pedidos de clientes</h3><p class="text-xs text-slate-400">${grupos.turno.length ? `${grupos.turno.length} esperando por tu departamento` : 'Nada pendiente en tu etapa'}</p></div>
+        ${S.ped.puedeCrear ? '<button data-acc="nuevo-pedido" class="btn-primario btn-sm shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Nuevo</button>' : ''}
+      </div>
+      <div class="px-4 py-3 flex gap-2 overflow-x-auto scroll-fino">${Object.keys(etiquetas).filter(k => k !== 'mios' || S.ped.puedeCrear).map(k => `<button data-acc="ped-filtro" data-f="${k}"
+        class="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold border ${S.pedFiltro === k ? 'bg-navy-900 text-white border-navy-900' : 'border-slate-300 text-slate-600'}">${etiquetas[k]} (${grupos[k].length})</button>`).join('')}</div>
+    </div>
+    <div class="space-y-3 mt-3">${visibles.length ? visibles.map(tarjetaPedido).join('') : `<div class="tarjeta p-6 text-center text-sm text-slate-400">${S.pedFiltro === 'turno' ? '¡Al día! No hay pedidos esperando por tu departamento.' : 'No hay pedidos en esta lista.'}</div>`}</div>`;
+  iconos();
+}
+
+/** Detalle completo del pedido con su historial. */
+function verPedido(id) {
+  const x = S.ped?.pedidos.find(p => p.ID === id);
+  if (!x) return;
+  const rr = S.sesion.rol !== 'EMPLEADO';
+  abrirModal({
+    titulo: `${x.Numero} · ${x.Cliente}`,
+    ancho: 'sm:max-w-2xl',
+    cuerpo: `<div class="space-y-4">
+      <div class="flex flex-wrap gap-2"><span class="insignia ${ESTILO_PEDIDO[x.Estado] || ''}">${esc(x.Estado)}</span><span class="insignia ${ESTILO_PRIORIDAD[x.Prioridad] || ''}">Prioridad ${esc(x.Prioridad.toLowerCase())}</span>
+        ${x.FechaLimite ? `<span class="insignia bg-slate-100 text-slate-700">Entrega: ${esc(fmtFecha(x.FechaLimite))}</span>` : ''}</div>
+      ${etapasHTML(x)}
+      <div class="grid sm:grid-cols-2 gap-4">
+        ${campoLectura('Cliente', esc(x.Cliente) + (x.ClienteTelefono ? ` · <a class="text-marca-700 font-semibold" href="tel:${esc(x.ClienteTelefono.replace(/-/g, ''))}">${esc(x.ClienteTelefono)}</a>` : ''))}
+        ${campoLectura('Registrado por', esc(x.CreadorNombre || x.CreadoPor) + ' · ' + esc(String(x.Creado).slice(0, 16)))}
+      </div>
+      <div><p class="etiqueta">Productos y cantidades</p><div class="rounded-xl border border-slate-200 divide-y divide-slate-100">${x.Items.map(i => `<div class="flex justify-between gap-3 px-4 py-2 text-sm"><span>${esc(i.d)}</span><b class="tabular-nums">${esc(fmtNum(i.c))}</b></div>`).join('')}</div></div>
+      ${x.Descripcion ? `<div><p class="etiqueta">Descripción</p><p class="text-sm whitespace-pre-line">${esc(x.Descripcion)}</p></div>` : ''}
+      <div><p class="etiqueta">Etapas y responsables</p><div class="space-y-1.5">${x.Etapas.map((e, i) => `<div class="flex items-center gap-2 text-sm"><span class="etapa-punto ${e.estado === 'Listo' ? 'bg-emerald-500 text-white' : i === x.EtapaActual && x.Estado === 'En producción' ? 'bg-oro-400 text-navy-950' : 'bg-slate-200 text-slate-500'}">${i + 1}</span>
+        <b>${esc(e.dep)}</b><span class="text-slate-500">· ${esc(e.estado || 'Pendiente')}${e.fin ? ' el ' + esc(String(e.fin).slice(0, 16)) : ''}</span></div>`).join('')}</div></div>
+      <div><p class="etiqueta">Historial</p><div class="space-y-1 text-xs text-slate-600">${x.Historial.slice().reverse().map(h => `<p><span class="text-slate-400">${esc(String(h[0]).slice(0, 16))}</span> · ${esc(h[1])}${rr ? ` <span class="text-slate-400">(${esc(h[2])})</span>` : ''}</p>`).join('')}</div></div>
+    </div>`,
+    pie: `<div class="flex flex-wrap gap-2 mr-auto">${S.sesion.rol === 'DIRECCION' ? '' : accionesPedidoHTML(x)}</div><button data-acc="cerrar-modal" class="btn-sec">Cerrar</button>`
+  });
+}
+
+/** Fila de producto del formulario de pedido. */
+const filaItemHTML = (i = { d: '', c: '' }) => `<div data-item class="flex gap-2">
+  <input name="it_d" class="campo flex-1" maxlength="160" placeholder="Producto (ej.: pendón 2 × 1 m)" value="${esc(i.d)}">
+  <input name="it_c" type="number" min="0" step="any" inputmode="decimal" class="campo w-24" placeholder="Cant." value="${esc(i.c)}">
+  <button type="button" data-acc="ped-item-menos" class="btn-fantasma btn-sm text-rose-600" title="Quitar"><i data-lucide="x" class="w-4 h-4"></i></button></div>`;
+
+/** Fila de etapa: solo el departamento (todo el departamento ve y atiende el pedido). */
+function filaEtapaHTML(et = { dep: '' }, bloqueada = false) {
+  const deps = S.ped?.departamentos || [];
+  const dep = deps.find(d => normalizar(d) === normalizar(et.dep)) || et.dep || '';
+  const existe = !dep || deps.includes(dep);
+  return `<div data-etapa class="rounded-xl border ${existe ? 'border-slate-200' : 'border-rose-200 bg-rose-50'} p-2 flex flex-wrap items-center gap-2" ${bloqueada ? 'data-bloqueada="1"' : ''}>
+    <span data-num class="etapa-punto bg-navy-900 text-white">·</span>
+    <select name="et_dep" class="campo flex-1 min-w-[160px]" ${bloqueada ? 'disabled' : ''}>${opciones(existe ? deps : deps.concat([dep]), dep, 'Departamento…')}</select>
+    ${bloqueada ? '<span class="text-xs text-emerald-700 font-semibold px-2">Lista ✓</span>' : `<button type="button" data-acc="ped-etapa-subir" class="btn-fantasma btn-sm" title="Subir"><i data-lucide="arrow-up" class="w-4 h-4"></i></button>
+    <button type="button" data-acc="ped-etapa-menos" class="btn-fantasma btn-sm text-rose-600" title="Quitar"><i data-lucide="x" class="w-4 h-4"></i></button>`}
+    ${existe ? '' : `<p class="w-full text-xs text-rose-700">El departamento "${esc(dep)}" no existe. Créalo en Ajustes → Departamentos o elige otro.</p>`}</div>`;
+}
+
+/** Numera las etapas (1, 2, 3…) después de agregar, quitar o mover. */
+function renumerarEtapas() { $$('#ped-etapas [data-num]').forEach((n, i) => { n.textContent = i + 1; }); }
+
+/** Formulario para crear o editar un pedido (Ventas desde el teléfono o RRHH desde el panel). */
+async function formPedido(id = null) {
+  if (!S.ped) await cargarPedidos({ silencioso: false });
+  if (!S.ped) return;
+  const x = id ? S.ped.pedidos.find(p => p.ID === id) : { Prioridad: 'Media', Items: [{ d: '', c: '' }], Etapas: [], Flujo: '' };
+  if (!x) return;
+  const pre = S.ped.flujos;
+  abrirModal({
+    titulo: id ? `Editar ${x.Numero}` : 'Nuevo pedido',
+    ancho: 'sm:max-w-2xl',
+    cuerpo: `<form id="f-pedido" class="space-y-4" onsubmit="return false" data-id="${esc(x.ID || '')}">
+      ${!id && S.ped.requiereAprobacion && S.sesion.rol !== 'RRHH' ? '<div class="rounded-xl bg-violet-50 text-violet-700 px-4 py-3 text-sm">Recursos Humanos debe autorizar el pedido antes de que pase a producción. Recibirás una notificación.</div>' : ''}
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div><label class="etiqueta">Cliente *</label><input name="Cliente" class="campo" maxlength="100" required value="${esc(x.Cliente || '')}" placeholder="Nombre o empresa"></div>
+        <div><label class="etiqueta">Teléfono del cliente</label><input name="ClienteTelefono" class="campo" data-tel inputmode="tel" placeholder="0412-1234567" value="${esc(x.ClienteTelefono || '')}"></div>
+        <div><label class="etiqueta">Prioridad</label><select name="Prioridad" class="campo">${opciones(S.ped.prioridades, x.Prioridad)}</select></div>
+        <div><label class="etiqueta">Fecha de entrega</label><input name="FechaLimite" type="date" class="campo" value="${esc(x.FechaLimite || '')}" min="${id ? '' : hoyStr()}"></div>
+      </div>
+      <div><label class="etiqueta">Productos y cantidades *</label><div id="ped-items" class="space-y-2">${x.Items.map(filaItemHTML).join('')}</div>
+        <button type="button" data-acc="ped-item-mas" class="btn-fantasma btn-sm mt-2"><i data-lucide="plus" class="w-4 h-4"></i>Agregar producto</button></div>
+      <div><label class="etiqueta">Descripción</label><textarea name="Descripcion" rows="2" maxlength="2000" class="campo" placeholder="Medidas, colores, material, arte aprobado…">${esc(x.Descripcion || '')}</textarea></div>
+      <div><label class="etiqueta">Flujo de trabajo *</label>
+        <div class="grid sm:grid-cols-2 gap-2 mb-3">${pre.map(f => `<button type="button" data-acc="ped-flujo" data-f="${esc(f.id)}" class="text-left rounded-xl border px-3 py-2 text-sm ${x.Flujo === f.nombre ? 'border-marca-700 bg-marca-50' : 'border-slate-200 hover:border-slate-400'}">
+          <b>${esc(f.id)}.</b> ${esc(f.nombre)}<span class="block text-[11px] text-slate-500">Ventas → ${esc(f.etapas.join(' → '))} → Cliente</span></button>`).join('')}</div>
+        <input type="hidden" name="Flujo" value="${esc(x.Flujo || '')}">
+        <div id="ped-etapas" class="space-y-2">${x.Etapas.map((e, i) => filaEtapaHTML(e, !!id && i < x.EtapaActual && x.Estado === 'En producción')).join('')}</div>
+        <button type="button" data-acc="ped-etapa-mas" class="btn-fantasma btn-sm mt-2"><i data-lucide="plus" class="w-4 h-4"></i>Agregar etapa</button>
+        <p class="text-xs text-slate-400 mt-1">Cada etapa es de todo el departamento: todos sus integrantes ven el pedido y reciben el aviso. Todos los departamentos involucrados pueden seguir el proceso hasta la entrega. Ventas siempre inicia y cierra el flujo.</p></div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-pedido" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>${id ? 'Guardar cambios' : (S.ped.requiereAprobacion && S.sesion.rol !== 'RRHH' ? 'Enviar a RRHH' : 'Crear pedido')}</button>`
+  });
+  renumerarEtapas();
+}
+
+/** Aplica un flujo prediseñado (A, B, C, D) a la lista de etapas. */
+function aplicarFlujo(idFlujo) {
+  const f = S.ped.flujos.find(x => x.id === idFlujo);
+  const form = $('#f-pedido');
+  if (!f || !form) return;
+  form.Flujo.value = f.nombre;
+  const bloqueadas = $$('#ped-etapas [data-bloqueada]');
+  $('#ped-etapas').innerHTML = bloqueadas.map(b => b.outerHTML).join('') + f.etapas.slice(bloqueadas.length).map(d => filaEtapaHTML({ dep: d })).join('');
+  $$('[data-acc="ped-flujo"]').forEach(b => { const on = b.dataset.f === idFlujo; b.classList.toggle('border-marca-700', on); b.classList.toggle('bg-marca-50', on); b.classList.toggle('border-slate-200', !on); });
+  renumerarEtapas(); iconos();
+}
+
+async function guardarPedidoForm() {
+  const f = $('#f-pedido');
+  if (!f.reportValidity()) return;
+  const items = $$('#ped-items [data-item]').map(r => ({ d: $('[name=it_d]', r).value.trim(), c: num($('[name=it_c]', r).value) })).filter(i => i.d || i.c);
+  if (!items.length) return toast('Agrega al menos un producto con su cantidad.', 'aviso');
+  const malo = items.find(i => !i.d || !(i.c > 0));
+  if (malo) return toast(`Revisa el producto "${malo.d || '(sin nombre)'}": necesita nombre y una cantidad mayor que cero.`, 'aviso');
+  const etapas = $$('#ped-etapas [data-etapa]').map(r => ({ dep: $('[name=et_dep]', r).value }));
+  if (!etapas.length) return toast('Elige un flujo o agrega al menos una etapa.', 'aviso');
+  if (etapas.some(e => !e.dep)) return toast('Elige el departamento de cada etapa.', 'aviso');
+  const d = datosFormulario(f);
+  const pedido = { ID: f.dataset.id || '', Cliente: d.Cliente, ClienteTelefono: d.ClienteTelefono, Prioridad: d.Prioridad, FechaLimite: d.FechaLimite,
+    Descripcion: d.Descripcion, Items: items, Etapas: etapas, Flujo: d.Flujo || 'Personalizado' };
+  try {
+    const r = await api('guardarPedido', { pedido }, { texto: 'Guardando pedido…' });
+    toast(pedido.ID ? 'Pedido actualizado.' : r.Estado === 'Por autorizar' ? `Pedido ${r.Numero} enviado a RRHH para su autorización.` : `Pedido ${r.Numero} creado: ya le llegó el aviso a ${r.Etapas[0].dep}.`, 'ok', 7000);
+    cerrarModal();
+    S.pedFiltro = 'mios';
+    cargarPedidos();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+/** Avanza, devuelve, cierra o cancela un pedido. */
+async function moverPedido(id, accion) {
+  const x = S.ped?.pedidos.find(p => p.ID === id);
+  let nota = '';
+  if (accion === 'devolver') { nota = await dialogo({ titulo: '¿Qué hay que corregir?', mensaje: `El pedido regresa a ${x ? x.Etapas[x.EtapaActual - 1].dep : 'la etapa anterior'} y se le avisa.`, boton: 'Devolver', conTexto: true, placeholder: 'Ej.: falta el sangrado en el arte' }); if (!nota) return; }
+  if (accion === 'cancelar') { nota = await dialogo({ titulo: '¿Cancelar el pedido?', mensaje: 'Se avisará a quienes están trabajando en él.', boton: 'Cancelar pedido', peligro: true, conTexto: true, placeholder: 'Motivo de la cancelación' }); if (!nota) return; }
+  if (accion === 'entregado' && !await confirmar('El pedido se cerrará como entregado al cliente.', { titulo: '¿Pedido entregado?', boton: 'Sí, entregado', peligro: false })) return;
+  try {
+    const r = await api('moverPedido', { id, accion, nota }, { texto: 'Actualizando pedido…' });
+    const textos = { tomar: 'Pedido tomado: ya es tuyo.', listo: r.Estado === 'Listo para entregar' ? '¡Pedido listo! Ventas ya recibió el aviso.' : `Listo. Se avisó a ${etapaActual(r)?.dep}.`,
+      devolver: 'Pedido devuelto con tu nota.', avisado: 'Marcado: cliente avisado.', entregado: '¡Pedido entregado!', cancelar: 'Pedido cancelado.' };
+    toast(textos[accion], 'ok');
+    cerrarModal();
+    cargarPedidos();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+async function autorizarPedido(id, autorizar) {
+  let motivo = '';
+  if (!autorizar) { motivo = await dialogo({ titulo: 'No autorizar el pedido', mensaje: 'Ventas recibirá el motivo por notificación y correo.', boton: 'No autorizar', peligro: true, conTexto: true, placeholder: 'Ej.: falta confirmar el pago' }); if (!motivo) return; }
+  try {
+    await api('autorizarPedido', { id, autorizar, motivo }, { texto: autorizar ? 'Autorizando…' : 'Guardando…' });
+    toast(autorizar ? 'Pedido autorizado: ya está en producción y se avisó al primer departamento.' : 'Pedido no autorizado. Ventas fue notificada.', 'ok', 7000);
+    S.sesion.pedidosPorAutorizar = Math.max(0, (S.sesion.pedidosPorAutorizar || 1) - 1);
+    actualizarInsignia(S.sesion.pedidosPorAutorizar, 'pedidos');
+    cerrarModal(); cargarPedidos();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+/** Panel de gestión: sección Pedidos. */
+async function cargarPedidosAdmin() {
+  if (!S.ped) $('#pd-tablero').innerHTML = '<p class="text-sm text-slate-400 pulso">Cargando pedidos…</p>';
+  else pintarPedidosAdmin();
+  await cargarPedidos();
+}
+
+function pintarPedidosAdmin() {
+  if (!S.ped) return;
+  const q = normalizar($('#pd-buscar').value.trim()), est = $('#pd-estado').value, dep = $('#pd-depto').value, pr = $('#pd-prio').value;
+  const todos = S.ped.pedidos;
+  const lista = todos.filter(x => (est !== 'activos' || PEDIDO_ACTIVO.includes(x.Estado)) && (!pr || x.Prioridad === pr) &&
+    (!dep || x.Etapas.some(e => e.dep === dep)) &&
+    (!q || normalizar([x.Numero, x.Cliente, x.Descripcion, x.CreadorNombre, x.Items.map(i => i.d).join(' ')].join(' ')).includes(q)))
+    .sort((a, b) => (ORDEN_PRIORIDAD[a.Prioridad] - ORDEN_PRIORIDAD[b.Prioridad]) || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9')));
+  const activos = todos.filter(x => PEDIDO_ACTIVO.includes(x.Estado));
+  const vencidos = activos.filter(x => x.FechaLimite && x.FechaLimite < hoyStr() && x.Estado !== 'Cliente avisado');
+  $('#pd-resumen').innerHTML = [
+    tarjetaKPI('hourglass', 'Por autorizar', todos.filter(x => x.Estado === 'Por autorizar').length, 'Esperan la aprobación de RRHH', 'violeta'),
+    tarjetaKPI('factory', 'En producción', todos.filter(x => x.Estado === 'En producción').length, 'Pasando por los departamentos', 'azul'),
+    tarjetaKPI('package-check', 'Listos para entregar', todos.filter(x => ['Listo para entregar', 'Cliente avisado'].includes(x.Estado)).length, 'Ventas debe avisar o entregar', 'verde'),
+    tarjetaKPI('alarm-clock', 'Vencidos', vencidos.length, 'Pasaron su fecha de entrega', 'rosa')
+  ].join('');
+  const columnas = [
+    { t: 'Por autorizar', f: x => x.Estado === 'Por autorizar' },
+    { t: 'En producción', f: x => x.Estado === 'En producción' },
+    { t: 'Listos / cliente avisado', f: x => ['Listo para entregar', 'Cliente avisado'].includes(x.Estado) },
+    { t: 'Cerrados', f: x => !PEDIDO_ACTIVO.includes(x.Estado) }
+  ];
+  $('#pd-tablero').innerHTML = columnas.map(c => { const xs = lista.filter(c.f); return `<div class="rounded-2xl bg-slate-100 p-3">
+      <p class="px-1 mb-3 text-sm font-bold text-slate-700">${c.t} <span class="text-slate-400">(${xs.length})</span></p>
+      <div class="space-y-3">${xs.length ? xs.slice(0, 40).map(tarjetaPedido).join('') : '<p class="text-xs text-slate-400 px-1 pb-2">Sin pedidos.</p>'}</div></div>`; }).join('');
+  renderTabla('pd-tabla', 't-pedidos', [
+    { t: 'Número', v: x => `<button data-acc="ver-pedido" data-id="${esc(x.ID)}" class="font-bold text-marca-700">${esc(x.Numero)}</button>`, s: x => x.Numero, c: x => x.Numero },
+    { t: 'Cliente', v: x => `<b>${esc(x.Cliente)}</b><div class="text-xs text-slate-500">${esc(x.ClienteTelefono || '')}</div>`, s: x => x.Cliente, c: x => x.Cliente },
+    { t: 'Productos', v: x => esc(x.Items.map(i => fmtNum(i.c) + ' × ' + i.d).join(', ')), c: x => x.Items.map(i => i.c + ' x ' + i.d).join('; ') },
+    { t: 'Prioridad', v: x => `<span class="insignia ${ESTILO_PRIORIDAD[x.Prioridad] || ''}">${esc(x.Prioridad)}</span>`, s: x => ORDEN_PRIORIDAD[x.Prioridad], c: x => x.Prioridad },
+    { t: 'Entrega', v: x => esc(fmtFecha(x.FechaLimite)), s: x => x.FechaLimite || '9', c: x => x.FechaLimite },
+    { t: 'Etapa', v: x => x.Estado === 'En producción' ? esc(etapaActual(x)?.dep || '') : '—', c: x => x.Estado === 'En producción' ? etapaActual(x)?.dep : '' },
+    { t: 'Flujo', v: x => esc(x.Etapas.map(e => e.dep).join(' → ')), c: x => x.Etapas.map(e => e.dep + ' (' + (e.estado || 'Pendiente') + ')').join(' > ') },
+    { t: 'Estado', v: x => `<span class="insignia ${ESTILO_PEDIDO[x.Estado] || ''}">${esc(x.Estado)}</span>`, s: x => x.Estado, c: x => x.Estado },
+    { t: 'Registró', v: x => esc(x.CreadorNombre || x.CreadoPor), c: x => x.CreadorNombre || x.CreadoPor },
+    { t: 'Creado', v: x => esc(String(x.Creado).slice(0, 10)), s: x => x.Creado, c: x => x.Creado, cls: 'hidden' }
+  ], lista, { vacio: todos.length ? 'Ningún pedido coincide con los filtros.' : 'Todavía no hay pedidos. Ventas los registra desde la app (pestaña Trabajo).' });
+  iconos();
+}
+
+/* ---------- Trámites: encuestas y constancias del colaborador ---------- */
+async function cargarTramites() {
+  if (!$('#mc-encuestas')) return;
+  if (!S.sesion?.empleadoId) { $('#mc-encuestas').innerHTML = ''; $('#mc-constancias').innerHTML = ''; return; }
+  try {
+    const [enc, cons] = await Promise.all([api('misEncuestas', {}, { silencioso: true }), api('misConstancias', {}, { silencioso: true })]);
+    S.misEnc = enc.encuestas; S.misCons = cons;
+    S.sesion.misEncuestasPendientes = S.misEnc.filter(e => !e.respondida).length;
+    pintarInsigniasEmp();
+    pintarTramites();
+  } catch (e) { $('#mc-constancias').innerHTML = `<div class="tarjeta p-5 text-sm text-rose-600">${esc(e.message)}</div>`; }
+}
+
+const ESTILO_CONSTANCIA = { Pendiente: 'bg-amber-100 text-amber-700', Aprobada: 'bg-emerald-100 text-emerald-700', Rechazada: 'bg-rose-100 text-rose-700' };
+
+function pintarTramites() {
+  const enc = S.misEnc || [];
+  $('#mc-encuestas').innerHTML = enc.length ? `<div class="tarjeta">
+    <div class="px-5 py-4 border-b border-slate-100"><h3 class="titulo-tarjeta">📊 Encuestas de clima laboral</h3><p class="text-xs text-slate-400">Son anónimas: nadie puede ver qué respondiste.</p></div>
+    <div class="divide-y divide-slate-100">${enc.map(e => `<div class="px-5 py-3.5 flex items-center gap-3">
+      <span class="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${e.respondida ? 'bg-emerald-50 text-emerald-700' : 'bg-oro-100 text-oro-700'}"><i data-lucide="${e.respondida ? 'check' : 'smile'}" class="w-5 h-5"></i></span>
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(e.Titulo)}</p><p class="text-xs text-slate-500">${e.Preguntas.length} preguntas${e.Cierre ? ' · hasta el ' + esc(fmtFecha(e.Cierre)) : ''}</p></div>
+      ${e.respondida ? '<span class="text-xs font-semibold text-emerald-700">Respondida</span>' : `<button data-acc="responder-encuesta" data-id="${esc(e.ID)}" class="btn-primario btn-sm">Responder</button>`}</div>`).join('')}</div></div>` : '';
+  const cons = S.misCons || [];
+  $('#mc-constancias').innerHTML = `<div class="tarjeta">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0"><span class="h-11 w-11 rounded-xl bg-marca-50 text-marca-700 flex items-center justify-center shrink-0"><i data-lucide="file-badge" class="w-5 h-5"></i></span>
+        <div class="min-w-0"><p class="font-semibold text-slate-800">Constancia de trabajo</p><p class="text-xs text-slate-500">RRHH la aprueba y te llega lista en PDF.</p></div></div>
+      <button data-acc="solicitar-constancia" class="btn-primario btn-sm shrink-0">Solicitar</button></div>
+    <div class="divide-y divide-slate-100">${cons.map(c => `<div class="px-5 py-3 flex items-center gap-3">
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(c.Tipo)}</p>
+        <p class="text-xs text-slate-500">${esc(String(c.Solicitado).slice(0, 10))}${c.DirigidaA ? ' · para ' + esc(c.DirigidaA) : ''}${c.Estado === 'Rechazada' && c.Comentario ? ' · ' + esc(c.Comentario) : ''}</p></div>
+      ${c.Estado === 'Aprobada' && c.FileID ? `<button data-acc="ver-constancia" data-id="${esc(c.ID)}" class="btn-sec btn-sm"><i data-lucide="download" class="w-4 h-4"></i>PDF</button>` : `<span class="insignia ${ESTILO_CONSTANCIA[c.Estado] || ''}">${esc(c.Estado)}</span>`}</div>`).join('')}</div></div>`;
+  iconos();
+}
+
+function formConstancia() {
+  abrirModal({
+    titulo: 'Solicitar constancia de trabajo',
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<form id="f-constancia" class="space-y-4" onsubmit="return false">
+      <div><label class="etiqueta">Tipo</label><select name="tipo" class="campo">${opciones(S.sesion.tiposConstancia || [])}</select></div>
+      <div><label class="etiqueta">Dirigida a (opcional)</label><input name="dirigidaA" class="campo" maxlength="120" placeholder="Ej.: Banco de Venezuela, A quien pueda interesar"></div>
+      <div><label class="etiqueta">Motivo (opcional)</label><input name="motivo" class="campo" maxlength="300" placeholder="Ej.: solicitud de crédito"></div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="enviar-constancia" class="btn-primario"><i data-lucide="send" class="w-4 h-4"></i>Enviar a RRHH</button>`
+  });
+}
+
+async function enviarConstancia() {
+  const d = datosFormulario($('#f-constancia'));
+  try {
+    await api('solicitarConstancia', d, { texto: 'Enviando solicitud…' });
+    toast('Solicitud enviada. Te avisaremos cuando la constancia esté lista.', 'ok', 6000);
+    cerrarModal(); cargarTramites();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+/** Formulario para responder una encuesta (escala 1 a 5 y preguntas abiertas). */
+function formResponderEncuesta(id) {
+  const e = (S.misEnc || []).find(x => x.ID === id);
+  if (!e) return;
+  const etq = ['Muy en desacuerdo', 'En desacuerdo', 'Neutral', 'De acuerdo', 'Muy de acuerdo'];
+  abrirModal({
+    titulo: e.Titulo,
+    ancho: 'sm:max-w-xl',
+    cuerpo: `<form id="f-encuesta" data-id="${esc(e.ID)}" class="space-y-5" onsubmit="return false">
+      <div class="rounded-xl bg-emerald-50 text-emerald-800 px-4 py-3 text-sm">🔒 Tu respuesta es <b>anónima</b>: no se guarda tu nombre ni tu correo, y RRHH solo ve resultados de grupos de 3 personas o más.</div>
+      ${e.Descripcion ? `<p class="text-sm text-slate-600">${esc(e.Descripcion)}</p>` : ''}
+      ${e.Preguntas.map((q, i) => `<div data-preg="${i}" data-tipo="${q.tipo}"><p class="text-sm font-semibold text-slate-800 mb-2">${i + 1}. ${esc(q.t)}</p>
+        ${q.tipo === 'texto' ? `<textarea rows="2" maxlength="1000" class="campo" placeholder="Opcional"></textarea>`
+          : `<div class="flex gap-1.5">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-acc="enc-escala" data-p="${i}" data-n="${n}" class="escala-btn" title="${etq[n - 1]}">${n}</button>`).join('')}</div>
+             <div class="flex justify-between text-[10px] text-slate-400 mt-1"><span>Muy en desacuerdo</span><span>Muy de acuerdo</span></div>`}</div>`).join('')}
+    </form>`,
+    pie: `<button data-acc="encuesta-luego" class="btn-sec">Responder luego</button><button data-acc="enviar-encuesta" class="btn-primario"><i data-lucide="send" class="w-4 h-4"></i>Enviar respuestas</button>`
+  });
+}
+
+async function enviarEncuesta() {
+  const f = $('#f-encuesta');
+  const resp = $$('[data-preg]', f).map(b => b.dataset.tipo === 'texto' ? $('textarea', b).value.trim() : Number(b.dataset.valor || 0));
+  const falta = $$('[data-preg]', f).findIndex(b => b.dataset.tipo !== 'texto' && !b.dataset.valor);
+  if (falta >= 0) { $$('[data-preg]', f)[falta].scrollIntoView({ behavior: 'smooth', block: 'center' }); return toast(`Responde la pregunta ${falta + 1} (de 1 a 5).`, 'aviso'); }
+  try {
+    await api('responderEncuesta', { id: f.dataset.id, respuestas: resp }, { texto: 'Enviando…' });
+    toast('¡Gracias por tu opinión! 💬', 'ok');
+    cerrarModal(); cargarTramites(); siguienteVentanaInicio();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+/* ---------- Panel: clima laboral ---------- */
+async function cargarClima() {
+  if (!S.clima) $('#cl-lista').innerHTML = '<p class="text-sm text-slate-400 pulso">Cargando encuestas…</p>';
+  try { S.clima = await api('encuestas', {}, { silencioso: true }); pintarClima(); } catch (e) { toast(e.message, 'error'); }
+}
+
+function pintarClima() {
+  if (!S.clima) return;
+  const l = S.clima.encuestas.slice().sort((a, b) => (b.abierta - a.abierta) || String(b.Creado).localeCompare(String(a.Creado)));
+  $('#cl-lista').innerHTML = l.length ? l.map(e => {
+    const pct = e.elegibles ? Math.round(e.respuestas / e.elegibles * 100) : 0;
+    return `<div class="tarjeta p-5">
+      <div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-bold text-slate-900">${esc(e.Titulo)}</p>
+        <p class="text-xs text-slate-500">${e.Audiencia === 'TODOS' ? 'Todo el personal' : esc(e.Audiencia)} · ${e.Preguntas.length} preguntas${e.Cierre ? ' · cierra el ' + esc(fmtFecha(e.Cierre)) : ''}</p></div>
+        <span class="insignia ${e.abierta ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">${e.abierta ? 'Abierta' : 'Cerrada'}</span></div>
+      <div class="mt-4"><div class="flex justify-between text-xs text-slate-500 mb-1"><span>Participación</span><b>${e.respuestas} de ${e.elegibles} (${pct}%)</b></div>
+        <div class="h-2 rounded-full bg-slate-200 overflow-hidden"><div class="h-full bg-marca-700" style="width:${Math.min(100, pct)}%"></div></div></div>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button data-acc="resultados-encuesta" data-id="${esc(e.ID)}" class="btn-primario btn-sm"><i data-lucide="chart-bar" class="w-4 h-4"></i>Resultados</button>
+        <button data-acc="enc-estado" data-id="${esc(e.ID)}" data-estado="${e.Estado === 'Abierta' ? 'Cerrada' : 'Abierta'}" class="solo-rrhh btn-sec btn-sm"><i data-lucide="${e.Estado === 'Abierta' ? 'lock' : 'lock-open'}" class="w-4 h-4"></i>${e.Estado === 'Abierta' ? 'Cerrar' : 'Reabrir'}</button>
+        <button data-acc="editar-encuesta" data-id="${esc(e.ID)}" class="solo-rrhh btn-sec btn-sm"><i data-lucide="pencil" class="w-4 h-4"></i>Editar</button>
+        <button data-acc="borrar-encuesta" data-id="${esc(e.ID)}" class="solo-rrhh btn-fantasma btn-sm text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>
+    </div>`; }).join('') : `<div class="tarjeta p-8 text-center text-sm text-slate-400 lg:col-span-2">Todavía no hay encuestas. Pulsa "Nueva encuesta" y elige 3 preguntas del banco (o escribe las tuyas). Puedes publicar una nueva cada cierto tiempo.</div>`;
+  iconos();
+}
+
+const filaPreguntaHTML = (q = { t: '', tipo: 'escala' }) => `<div data-q class="flex gap-2">
+  <input name="q_t" class="campo flex-1" maxlength="200" value="${esc(q.t)}" placeholder="Escribe la pregunta">
+  <select name="q_tipo" class="campo w-36"><option value="escala" ${q.tipo !== 'texto' ? 'selected' : ''}>Escala 1 a 5</option><option value="texto" ${q.tipo === 'texto' ? 'selected' : ''}>Respuesta abierta</option></select>
+  <button type="button" data-acc="enc-pregunta-menos" class="btn-fantasma btn-sm text-rose-600"><i data-lucide="x" class="w-4 h-4"></i></button></div>`;
+
+/** Nueva encuesta: RRHH elige hasta 3 preguntas del banco (o escribe las suyas). */
+function formEncuesta(id = null) {
+  const max = S.clima.maximo || 3;
+  const e = id ? S.clima.encuestas.find(x => x.ID === id) : { Titulo: 'Clima laboral · ' + new Date().toLocaleDateString('es-VE', { month: 'long', year: 'numeric' }), Audiencia: 'TODOS', Preguntas: [] };
+  if (!e) return;
+  const bloqueada = id && e.respuestas > 0;
+  const elegidas = e.Preguntas.map(q => q.t);
+  const propias = e.Preguntas.filter(q => !S.clima.banco.some(b => b.t === q.t));
+  abrirModal({
+    titulo: id ? 'Editar encuesta' : 'Nueva encuesta de clima laboral',
+    ancho: 'sm:max-w-3xl',
+    cuerpo: `<form id="f-enc" data-id="${esc(id || '')}" class="space-y-4" onsubmit="return false">
+      <div class="grid sm:grid-cols-3 gap-4">
+        <div class="sm:col-span-2"><label class="etiqueta">Título *</label><input name="Titulo" class="campo" maxlength="120" required value="${esc(e.Titulo)}"></div>
+        <div><label class="etiqueta">Cierra el (opcional)</label><input name="Cierre" type="date" class="campo" value="${esc(e.Cierre || '')}"></div>
+        <div class="sm:col-span-2"><label class="etiqueta">Mensaje para el personal</label><input name="Descripcion" class="campo" maxlength="600" value="${esc(e.Descripcion || '')}" placeholder="Son solo 3 preguntas. Tu opinión nos ayuda a mejorar."></div>
+        <div><label class="etiqueta">¿Para quién?</label><select name="Audiencia" class="campo" ${bloqueada ? 'disabled' : ''}>${opciones([{ v: 'TODOS', t: 'Todo el personal' }].concat(S.sesion.departamentos || []), e.Audiencia)}</select></div>
+      </div>
+      <fieldset ${bloqueada ? 'disabled' : ''}>
+        <div class="flex items-center justify-between"><label class="etiqueta mb-0">Elige ${max} preguntas para este período</label><span id="enc-cuenta" class="insignia bg-marca-50 text-marca-700">0 de ${max}</span></div>
+        ${bloqueada ? '<p class="text-xs text-amber-700 mt-1">Ya hay respuestas: las preguntas no se pueden cambiar.</p>' : ''}
+        <div class="mt-2 grid sm:grid-cols-2 gap-2">${S.clima.banco.map((q, i) => `<label class="flex items-start gap-2 rounded-xl border border-slate-200 p-2.5 text-sm cursor-pointer hover:bg-slate-50">
+          <input type="checkbox" name="enc_banco" value="${i}" class="mt-0.5 h-4 w-4 accent-[#C10866]" ${elegidas.includes(q.t) ? 'checked' : ''}>
+          <span>${esc(q.t)}<span class="block text-[11px] text-slate-400">${q.tipo === 'texto' ? 'Respuesta abierta' : 'Escala del 1 al 5'}</span></span></label>`).join('')}</div>
+        <p class="etiqueta mt-4">O escribe tus propias preguntas</p>
+        <div id="enc-preguntas" class="space-y-2">${propias.map(filaPreguntaHTML).join('')}</div>
+        <button type="button" data-acc="enc-pregunta-mas" class="btn-fantasma btn-sm mt-2"><i data-lucide="plus" class="w-4 h-4"></i>Agregar una pregunta propia</button>
+      </fieldset>
+      ${id ? '' : '<p class="text-xs text-slate-500">Al publicarla, al personal le aparece una ventana para responderla la próxima vez que abra la app.</p>'}
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-encuesta" class="btn-primario"><i data-lucide="check" class="w-4 h-4"></i>${id ? 'Guardar' : 'Publicar encuesta'}</button>`
+  });
+  contarPreguntasEncuesta();
+}
+
+/** Preguntas elegidas en el formulario (del banco + propias), en orden. */
+function preguntasElegidas() {
+  return $$('[name=enc_banco]:checked').map(i => S.clima.banco[Number(i.value)])
+    .concat($$('#enc-preguntas [data-q]').map(r => ({ t: $('[name=q_t]', r).value.trim(), tipo: $('[name=q_tipo]', r).value })).filter(q => q.t));
+}
+
+/** Muestra cuántas preguntas van elegidas (máximo 3). */
+function contarPreguntasEncuesta() {
+  const el = $('#enc-cuenta');
+  if (!el) return;
+  const n = preguntasElegidas().length, max = S.clima.maximo || 3;
+  el.textContent = `${n} de ${max}`;
+  el.className = 'insignia ' + (n > max ? 'bg-rose-100 text-rose-700' : n === max ? 'bg-emerald-100 text-emerald-700' : 'bg-marca-50 text-marca-700');
+}
+
+async function guardarEncuestaForm(estado = null, idDirecto = null) {
+  let encuesta;
+  if (idDirecto) {
+    const e = S.clima.encuestas.find(x => x.ID === idDirecto);
+    encuesta = { ID: e.ID, Titulo: e.Titulo, Descripcion: e.Descripcion, Cierre: e.Cierre, Audiencia: e.Audiencia, Preguntas: e.Preguntas };
+  } else {
+    const f = $('#f-enc');
+    if (!f.reportValidity()) return;
+    const d = datosFormulario(f);
+    const e = f.dataset.id ? S.clima.encuestas.find(x => x.ID === f.dataset.id) : null;
+    encuesta = { ID: f.dataset.id, Titulo: d.Titulo, Descripcion: d.Descripcion, Cierre: d.Cierre, Audiencia: f.Audiencia.value, Preguntas: preguntasElegidas() };
+    if (e && e.respuestas > 0) encuesta.Preguntas = e.Preguntas;
+    if (!encuesta.Preguntas.length) return toast('Elige al menos una pregunta.', 'aviso');
+    if (encuesta.Preguntas.length > (S.clima.maximo || 3)) return toast(`Elige máximo ${S.clima.maximo || 3} preguntas: las más importantes de este período.`, 'aviso');
+  }
+  try {
+    await api('guardarEncuesta', { encuesta, estado }, { texto: 'Guardando encuesta…' });
+    toast(estado ? `Encuesta ${estado.toLowerCase()}.` : encuesta.ID ? 'Encuesta actualizada.' : 'Encuesta publicada: el personal ya recibió el aviso.', 'ok');
+    cerrarModal(); cargarClima();
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+async function borrarEncuesta(id) {
+  if (!await confirmar('Se eliminarán la encuesta y todas sus respuestas.', { titulo: '¿Eliminar encuesta?' })) return;
+  try { await api('eliminarEncuesta', { id }, { texto: 'Eliminando…' }); toast('Encuesta eliminada.', 'ok'); cargarClima(); } catch (e) { toast(e.message, 'error'); }
+}
+
+/** Resultados: índice general, promedio por pregunta, por departamento y comentarios. */
+async function verResultadosEncuesta(id) {
+  let r;
+  try { r = await api('resultadosEncuesta', { id }, { texto: 'Calculando resultados…' }); } catch (e) { return toast(e.message, 'error'); }
+  const g = r.general, P = r.encuesta.Preguntas;
+  const color = v => v === null || v === undefined ? 'text-slate-400' : v >= 4 ? 'text-emerald-700' : v >= 3 ? 'text-amber-700' : 'text-rose-700';
+  const f1 = v => v === null || v === undefined ? '—' : v.toLocaleString('es-VE', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+  const escala = P.map((q, i) => ({ q, i })).filter(x => x.q.tipo !== 'texto');
+  abrirModal({
+    titulo: 'Resultados · ' + r.encuesta.Titulo,
+    ancho: 'sm:max-w-4xl',
+    cuerpo: g.oculto ? `<div class="rounded-xl bg-amber-50 text-amber-800 px-4 py-6 text-center">Hay <b>${g.n}</b> respuesta${g.n === 1 ? '' : 's'}. Para proteger el anonimato, los resultados se muestran a partir de <b>${r.minimo}</b>.</div>`
+      : `<div class="space-y-5">
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        ${tarjetaKPI('gauge', 'Índice de clima', `<span class="${color(g.indice)}">${f1(g.indice)}</span><span class="text-base text-slate-400"> / 5</span>`, g.indice >= 4 ? 'Muy bueno' : g.indice >= 3 ? 'Aceptable: hay puntos por mejorar' : 'Requiere atención', 'marca')}
+        ${tarjetaKPI('users', 'Participación', `${r.elegibles ? Math.round(g.n / r.elegibles * 100) : 0}%`, `${g.n} de ${r.elegibles} personas`, 'azul')}
+        ${tarjetaKPI('message-square', 'Comentarios', (r.comentarios || []).filter(Boolean).reduce((s, c) => s + c.length, 0), 'Respuestas abiertas', 'verde')}
+      </div>
+      <div class="tarjeta p-5"><h4 class="titulo-tarjeta mb-3">Promedio por pregunta (1 a 5)</h4><div style="height:${Math.max(220, escala.length * 34)}px"><canvas id="enc-graf"></canvas></div></div>
+      <div class="tarjeta"><div class="px-5 py-4 border-b border-slate-100"><h4 class="titulo-tarjeta">Por departamento</h4><p class="text-xs text-slate-400">Los departamentos con menos de ${r.minimo} respuestas no se muestran.</p></div>
+        <div class="overflow-x-auto scroll-fino"><table class="tabla w-full text-sm"><thead><tr><th class="text-left px-4 py-2">Departamento</th><th class="px-4 py-2">Respuestas</th><th class="px-4 py-2">Índice</th></tr></thead><tbody>
+        ${r.porDepto.map(d => `<tr><td class="px-4 py-2 font-semibold">${esc(d.depto)}</td><td class="px-4 py-2 text-center">${d.oculto ? 'menos de ' + r.minimo : d.n}</td><td class="px-4 py-2 text-center font-bold ${color(d.indice)}">${d.oculto ? '🔒' : f1(d.indice)}</td></tr>`).join('')}</tbody></table></div></div>
+      ${P.map((q, i) => q.tipo === 'texto' && r.comentarios[i] && r.comentarios[i].length ? `<div class="tarjeta p-5"><h4 class="titulo-tarjeta mb-3">${esc(q.t)}</h4>
+        <div class="space-y-2">${r.comentarios[i].map(c => `<p class="rounded-lg bg-slate-50 px-3 py-2 text-sm">“${esc(c)}”</p>`).join('')}</div></div>` : '').join('')}
+    </div>`,
+    pie: '<button data-acc="imprimir-modal" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button><button data-acc="cerrar-modal" class="btn-primario">Cerrar</button>'
+  });
+  if (g.oculto) return;
+  const vals = escala.map(x => g.porPregunta[x.i]?.promedio ?? 0);
+  grafico('enc-graf', { type: 'bar', data: { labels: escala.map(x => (x.i + 1) + '. ' + (x.q.t.length > 48 ? x.q.t.slice(0, 46) + '…' : x.q.t)),
+    datasets: [{ label: 'Promedio', data: vals, borderRadius: 6, backgroundColor: vals.map(v => v >= 4 ? PALETA.turquesa : v >= 3 ? PALETA.amarillo : PALETA.magenta) }] },
+    options: baseOpciones({ indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { min: 0, max: 5, ticks: { stepSize: 1 } } } }) });
+}
+
+/* ---------- Panel: constancias ---------- */
+async function cargarConstanciasAdmin() {
+  try { S.cons = await api('constancias', {}, { silencioso: !!S.cons }); if (!S.empleados.length) await asegurarCatalogo(); pintarConstanciasAdmin(); } catch (e) { toast(e.message, 'error'); }
+}
+
+function pintarConstanciasAdmin() {
+  if (!S.cons) return;
+  const lista = S.cons.slice().sort((a, b) => ((a.Estado === 'Pendiente') === (b.Estado === 'Pendiente') ? 0 : a.Estado === 'Pendiente' ? -1 : 1));
+  S.sesion.constanciasPendientes = S.cons.filter(c => c.Estado === 'Pendiente').length;
+  actualizarInsignia(S.sesion.constanciasPendientes, 'constancias');
+  renderTabla('co-tabla', 't-constancias', [
+    { t: 'Persona', v: c => `<button data-acc="ver-expediente" data-id="${esc(c.EmpleadoID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(empPorId(c.EmpleadoID)) || c.EmpleadoID)}</button><div class="text-xs text-slate-500">${esc(empPorId(c.EmpleadoID)?.Departamento || '')}</div>`, s: c => nombreCompleto(empPorId(c.EmpleadoID)), c: c => nombreCompleto(empPorId(c.EmpleadoID)) },
+    { t: 'Tipo', v: c => esc(c.Tipo), s: c => c.Tipo, c: c => c.Tipo },
+    { t: 'Dirigida a', v: c => esc(c.DirigidaA || '—'), c: c => c.DirigidaA },
+    { t: 'Motivo', v: c => esc(c.Motivo || '—'), c: c => c.Motivo },
+    { t: 'Solicitada', v: c => esc(String(c.Solicitado).slice(0, 16)), s: c => c.Solicitado, c: c => c.Solicitado },
+    { t: 'Estado', v: c => `<span class="insignia ${ESTILO_CONSTANCIA[c.Estado] || ''}">${esc(c.Estado)}</span>${c.Comentario ? `<div class="text-xs text-slate-500 mt-1">${esc(c.Comentario)}</div>` : ''}`, s: c => c.Estado, c: c => c.Estado },
+    { t: '', v: c => `<div class="flex justify-end gap-1 whitespace-nowrap no-print">${c.Estado === 'Pendiente' ? `<button data-acc="aprobar-constancia" data-id="${esc(c.ID)}" class="solo-rrhh btn-primario btn-sm"><i data-lucide="check" class="w-4 h-4"></i>Aprobar y generar</button>
+        <button data-acc="rechazar-constancia" data-id="${esc(c.ID)}" class="solo-rrhh btn-sec btn-sm">Rechazar</button>` : ''}${c.FileID ? `<button data-acc="ver-constancia" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="Ver PDF"><i data-lucide="file-down" class="w-4 h-4"></i></button>` : ''}</div>`, cls: 'text-right' }
+  ], lista, { vacio: 'Todavía no hay solicitudes de constancias.' });
+}
+
+async function resolverConstancia(id, aprobar) {
+  let comentario = '';
+  if (!aprobar) { comentario = await dialogo({ titulo: 'Rechazar constancia', mensaje: 'La persona recibirá el motivo.', boton: 'Rechazar', peligro: true, conTexto: true, placeholder: 'Motivo' }); if (!comentario) return; }
+  try {
+    await api('resolverConstancia', { id, aprobar, comentario }, { texto: aprobar ? 'Generando la constancia en PDF…' : 'Guardando…' });
+    toast(aprobar ? 'Constancia generada, guardada en el expediente y notificada.' : 'Solicitud rechazada.', 'ok', 6000);
+    cargarConstanciasAdmin();
+  } catch (e) { toast(e.message, 'error', 8000); }
+}
+
+/* ---------- Panel: indicadores históricos ---------- */
+/** Carga los datos necesarios (en tramos de hasta 12 meses) y calcula los indicadores de cada mes. */
+async function cargarIndicadores() {
+  const meses = Number($('#ih-meses').value) || 12;
+  const hoy = hoyStr();
+  const ini = fechaStr(new Date(Number(hoy.slice(0, 4)), Number(hoy.slice(5, 7)) - meses, 1));
+  if (!S.ih || S.ih.desde > ini || Date.now() - S.ih.t > 5 * 60000) {
+    $('#ih-kpis').innerHTML = '<p class="text-sm text-slate-400 pulso col-span-4">Cargando el histórico…</p>';
+    try {
+      const tramos = [];
+      for (let d = ini; d <= hoy; d = sumarDias(d, 366)) tramos.push([d, [sumarDias(d, 365), hoy].sort()[0]]);
+      const res = await Promise.all(tramos.map(([a, b]) => api('datosPeriodo', { desde: a, hasta: b }, { silencioso: true })));
+      S.ih = { t: Date.now(), desde: ini, empleados: res[0].empleados, permisos: res[0].permisos, evaluaciones: res[0].evaluaciones, asistencia: res.map(r => r.asistencia).flat() };
+    } catch (e) { $('#ih-kpis').innerHTML = ''; return toast(e.message, 'error'); }
+  }
+  pintarIndicadores();
+}
+
+function pintarIndicadores() {
+  if (!S.ih) return;
+  const meses = Number($('#ih-meses').value) || 12, dep = $('#ih-depto').value;
+  const hoy = hoyStr();
+  const lista = [];
+  for (let k = meses - 1; k >= 0; k--) {
+    const d = new Date(Number(hoy.slice(0, 4)), Number(hoy.slice(5, 7)) - 1 - k, 1);
+    const desde = fechaStr(d), finMes = fechaStr(new Date(d.getFullYear(), d.getMonth() + 1, 0)), hasta = finMes > hoy ? hoy : finMes;
+    const emps = S.ih.empleados.filter(e => (!dep || e.Departamento === dep) && (!e.FechaIngreso || e.FechaIngreso <= hasta) && (!e.FechaEgreso || e.FechaEgreso >= desde));
+    const k2 = calcularKPIs(emps, S.ih.asistencia.filter(a => a.Fecha >= desde && a.Fecha <= hasta), S.ih.permisos, S.ih.evaluaciones, desde, hasta).tot;
+    const activosFin = S.ih.empleados.filter(e => (!dep || e.Departamento === dep) && e.FechaIngreso && e.FechaIngreso <= hasta && (!e.FechaEgreso || e.FechaEgreso > hasta)).length;
+    const ingresos = S.ih.empleados.filter(e => (!dep || e.Departamento === dep) && e.FechaIngreso >= desde && e.FechaIngreso <= hasta).length;
+    const egresos = S.ih.empleados.filter(e => (!dep || e.Departamento === dep) && e.FechaEgreso && e.FechaEgreso >= desde && e.FechaEgreso <= hasta).length;
+    lista.push({ mes: desde.slice(0, 7), etq: d.toLocaleDateString('es-VE', { month: 'short', year: '2-digit' }), asis: k2.pctAsistencia, punt: k2.pctPuntualidad,
+      ausencias: k2.ausencias, tardes: k2.tardes, horas: k2.minTrabajados / 60, extra: k2.minExtra / 60, activos: activosFin, ingresos, egresos,
+      rotacion: activosFin ? egresos / activosFin * 100 : null, eval: k2.evalProm });
+  }
+  S.ihFilas = lista;
+  const ult = lista[lista.length - 1] || {}, prev = lista[lista.length - 2] || {};
+  const prom = k => { const v = lista.map(x => x[k]).filter(x => x !== null && x !== undefined); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  $('#ih-subtitulo').textContent = `Últimos ${meses} meses${dep ? ' · ' + dep : ' · toda la empresa'} · el mes actual va hasta hoy`;
+  const delta = (a, b, inv = false, suf = ' pts') => (a === null || b === null || a === undefined || b === undefined) ? 'sin comparación' : `<span class="${(a - b) * (inv ? -1 : 1) >= 0 ? 'text-emerald-600' : 'text-rose-600'} font-semibold">${a - b >= 0 ? '▲' : '▼'} ${Math.abs(a - b).toLocaleString('es-VE', { maximumFractionDigits: 1 })}${suf}</span> vs. mes anterior`;
+  $('#ih-kpis').innerHTML = [
+    tarjetaKPI('calendar-check', 'Asistencia promedio', fmtPct(prom('asis')), `Este mes: ${fmtPct(ult.asis)} · ${delta(ult.asis, prev.asis)}`, 'verde'),
+    tarjetaKPI('timer', 'Puntualidad promedio', fmtPct(prom('punt')), `Este mes: ${fmtPct(ult.punt)} · ${delta(ult.punt, prev.punt)}`, 'azul'),
+    tarjetaKPI('hourglass', 'Horas extra / mes', fmtNum(prom('extra')) + ' h', `Este mes: ${fmtNum(ult.extra)} h`, 'violeta'),
+    tarjetaKPI('users', 'Personal activo', ult.activos ?? '—', `Rotación del período: ${fmtPct(lista.reduce((s, x) => s + x.egresos, 0) / Math.max(1, prom('activos')) * 100)}`, 'marca')
+  ].join('');
+  const L = lista.map(x => x.etq);
+  grafico('ih-g-asis', { type: 'line', data: { labels: L, datasets: [
+    { label: 'Asistencia %', data: lista.map(x => x.asis), borderColor: PALETA.turquesa, backgroundColor: conAlfa(PALETA.turquesa, .15), fill: true, tension: .3 },
+    { label: 'Puntualidad %', data: lista.map(x => x.punt), borderColor: PALETA.magenta, backgroundColor: PALETA.magenta, tension: .3 }] },
+    options: baseOpciones({ scales: { y: { min: 0, max: 100 } } }) });
+  grafico('ih-g-aus', { type: 'bar', data: { labels: L, datasets: [
+    { label: 'Ausencias', data: lista.map(x => x.ausencias), backgroundColor: PALETA.magenta, borderRadius: 5 },
+    { label: 'Llegadas tarde', data: lista.map(x => x.tardes), backgroundColor: PALETA.amarillo, borderRadius: 5 }] }, options: baseOpciones() });
+  grafico('ih-g-horas', { type: 'bar', data: { labels: L, datasets: [
+    { label: 'Horas trabajadas', data: lista.map(x => Math.round(x.horas)), backgroundColor: PALETA.azul, borderRadius: 5, yAxisID: 'y' },
+    { label: 'Horas extra', data: lista.map(x => Math.round(x.extra * 10) / 10), type: 'line', borderColor: PALETA.cian, backgroundColor: PALETA.cian, tension: .3, yAxisID: 'y1' }] },
+    options: baseOpciones({ scales: { y: { position: 'left' }, y1: { position: 'right', grid: { drawOnChartArea: false } } } }) });
+  grafico('ih-g-personal', { type: 'bar', data: { labels: L, datasets: [
+    { label: 'Activos al cierre', data: lista.map(x => x.activos), type: 'line', borderColor: PALETA.purpura, backgroundColor: PALETA.purpura, tension: .3 },
+    { label: 'Ingresos', data: lista.map(x => x.ingresos), backgroundColor: PALETA.turquesa, borderRadius: 5 },
+    { label: 'Egresos', data: lista.map(x => x.egresos), backgroundColor: PALETA.naranja, borderRadius: 5 }] }, options: baseOpciones() });
+  const igual = m => { const y = String(Number(m.slice(0, 4)) - 1) + m.slice(4); return lista.find(x => x.mes === y); };
+  const dlt = (a, b, inv) => (a === null || b === null || a === undefined || b === undefined) ? '' : `<span class="block text-[10px] ${(a - b) * (inv ? -1 : 1) >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${a - b >= 0 ? '▲' : '▼'}${Math.abs(a - b).toLocaleString('es-VE', { maximumFractionDigits: 1 })}</span>`;
+  renderTabla('ih-tabla', 't-indicadores', [
+    { t: 'Mes', v: x => `<b class="cap1">${esc(x.etq)}</b>`, s: x => x.mes, c: x => x.mes },
+    { t: 'Asistencia', v: (x, i) => fmtPct(x.asis) + dlt(x.asis, lista[lista.indexOf(x) - 1]?.asis) + (igual(x.mes) ? `<span class="block text-[10px] text-slate-400">año ant.: ${fmtPct(igual(x.mes).asis)}</span>` : ''), s: x => x.asis ?? -1, c: x => x.asis === null ? '' : Math.round(x.asis) },
+    { t: 'Puntualidad', v: x => fmtPct(x.punt) + dlt(x.punt, lista[lista.indexOf(x) - 1]?.punt), s: x => x.punt ?? -1, c: x => x.punt === null ? '' : Math.round(x.punt) },
+    { t: 'Ausencias', v: x => x.ausencias + dlt(x.ausencias, lista[lista.indexOf(x) - 1]?.ausencias, true), s: x => x.ausencias, c: x => x.ausencias },
+    { t: 'Llegadas tarde', v: x => x.tardes + dlt(x.tardes, lista[lista.indexOf(x) - 1]?.tardes, true), s: x => x.tardes, c: x => x.tardes },
+    { t: 'Horas trabajadas', v: x => fmtNum(x.horas), s: x => x.horas, c: x => Math.round(x.horas) },
+    { t: 'Horas extra', v: x => fmtNum(x.extra), s: x => x.extra, c: x => Math.round(x.extra * 10) / 10 },
+    { t: 'Activos', v: x => x.activos, s: x => x.activos, c: x => x.activos },
+    { t: 'Ingresos', v: x => x.ingresos, c: x => x.ingresos },
+    { t: 'Egresos', v: x => x.egresos, c: x => x.egresos },
+    { t: 'Rotación', v: x => fmtPct(x.rotacion), c: x => x.rotacion === null ? '' : Math.round(x.rotacion * 10) / 10 },
+    { t: 'Desempeño', v: x => x.eval === null ? '—' : fmtNum(x.eval), c: x => x.eval === null ? '' : Math.round(x.eval) }
+  ], lista.slice().reverse(), { vacio: 'Sin datos.' });
+}
+
+/* ---------- Ajustes v4 ---------- */
+/** Tarjeta de Ajustes para pedidos, portal de empleo y datos de las constancias. */
+function ajustesV4HTML(c, departamentos, campo, interruptor, dis) {
+  const elegidos = String(c.PEDIDOS_DEPARTAMENTOS || '').split(/[,;]/).map(x => normalizar(x.trim())).filter(Boolean);
+  const chips = departamentos.filter(d => d.Activo).map(d => `<label class="cursor-pointer"><input type="checkbox" name="pedDep" value="${esc(d.Nombre)}" class="peer sr-only" ${elegidos.includes(normalizar(d.Nombre)) ? 'checked' : ''} ${dis}>
+    <span class="block rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 peer-checked:bg-navy-900 peer-checked:text-white peer-checked:border-navy-900">${esc(d.Nombre)}</span></label>`).join('');
+  return `<div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Pedidos de clientes</h3>
+      <p class="text-xs text-slate-400 mb-4">Quién puede registrar pedidos desde la app. También puedes dar el permiso a una persona desde su expediente.</p>
+      <label class="etiqueta">Departamentos que crean pedidos</label><div class="flex flex-wrap gap-2 mb-4">${chips}</div>
+      ${interruptor('PEDIDOS_REQUIEREN_APROBACION', 'RRHH autoriza cada pedido antes de producción', 'Si lo apagas, el pedido pasa directo al primer departamento del flujo.')}
+    </div>
+    <div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Portal "Trabaja con nosotros"</h3>
+      <p class="text-xs text-slate-400 mb-4">Página pública donde los aspirantes dejan su contacto, el departamento y su currículum, cédula y RIF en PDF. Todo llega al banco de currículums.</p>
+      <div class="grid sm:grid-cols-2 gap-4">
+        ${interruptor('PORTAL_ABIERTO', 'Recibir postulaciones', 'Si lo apagas, la página muestra que por ahora no hay vacantes.')}
+        <div class="rounded-xl border border-slate-200 p-3 text-sm"><p class="font-semibold text-slate-800 mb-1">Enlace para compartir</p>
+          <a href="${URL_PORTAL}" target="_blank" rel="noopener" class="text-marca-700 break-all">${URL_PORTAL}</a>
+          <button type="button" data-acc="copiar-portal" class="btn-sec btn-sm mt-2 w-full"><i data-lucide="copy" class="w-4 h-4"></i>Copiar enlace</button></div>
+
+      </div>
+    </div>
+    <div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Datos para las constancias de trabajo</h3>
+      <p class="text-xs text-slate-400 mb-4">Aparecen en el encabezado y la firma del PDF.</p>
+      <div class="grid sm:grid-cols-2 gap-4">
+        ${campo('EMPRESA_RIF', 'RIF', 'text', 'maxlength="20" placeholder="J-12345678-9"')}${campo('EMPRESA_TELEFONO', 'Teléfono', 'text', 'maxlength="40"')}
+        <div class="sm:col-span-2">${campo('EMPRESA_DIRECCION', 'Dirección fiscal', 'text', 'maxlength="200"')}</div>
+        ${campo('EMPRESA_CIUDAD', 'Ciudad de emisión', 'text', 'maxlength="60" placeholder="Barcelona, estado Anzoátegui"')}<div></div>
+        ${campo('FIRMANTE_NOMBRE', 'Nombre de quien firma', 'text', 'maxlength="80"')}${campo('FIRMANTE_CARGO', 'Cargo de quien firma', 'text', 'maxlength="80"')}
+      </div>
+    </div>`;
+}
+
+async function copiarPortal() {
+  try { await navigator.clipboard.writeText(URL_PORTAL); toast('Enlace copiado: ' + URL_PORTAL, 'ok'); }
+  catch (e) { await dialogo({ titulo: 'Enlace del portal de empleo', mensaje: 'Cópialo y compártelo en redes o WhatsApp:', conTexto: true, linea: true, valor: URL_PORTAL, boton: 'Listo' }); }
+}
+
+/* ---------- Acciones de botones (v4) ---------- */
+Object.assign(ACC, {
+  'tab-emp': d => cambiarTabEmp(d.tab),
+  'pausa-rrhh': () => formPausaRRHH(),
+  'pz-todos': () => { const v = $$('[name=pz_emp]').filter(i => !i.closest('.hidden')); const todos = v.every(i => i.checked); v.forEach(i => { i.checked = !todos; }); },
+  'guardar-pausa': () => guardarPausa(),
+  'ver-pausas': d => verPausas(d.id),
+  'quitar-pausa': d => quitarPausa(d.id, d.i),
+  'nuevo-pedido': () => formPedido(),
+  'editar-pedido': d => formPedido(d.id),
+  'ver-pedido': d => verPedido(d.id),
+  'guardar-pedido': () => guardarPedidoForm(),
+  'ped-item-mas': () => { $('#ped-items').insertAdjacentHTML('beforeend', filaItemHTML()); iconos(); $$('#ped-items [name=it_d]').pop().focus(); },
+  'ped-item-menos': (d, b) => { if ($$('#ped-items [data-item]').length > 1) b.closest('[data-item]').remove(); else $$('#ped-items input').forEach(i => { i.value = ''; }); },
+  'ped-etapa-mas': () => { $('#ped-etapas').insertAdjacentHTML('beforeend', filaEtapaHTML()); $('#f-pedido').Flujo.value = 'Personalizado'; renumerarEtapas(); iconos(); },
+  'ped-etapa-menos': (d, b) => { b.closest('[data-etapa]').remove(); $('#f-pedido').Flujo.value = 'Personalizado'; renumerarEtapas(); },
+  'ped-etapa-subir': (d, b) => { const r = b.closest('[data-etapa]'), a = r.previousElementSibling; if (a && !a.dataset.bloqueada) { r.parentNode.insertBefore(r, a); $('#f-pedido').Flujo.value = 'Personalizado'; renumerarEtapas(); } },
+  'ped-flujo': d => aplicarFlujo(d.f),
+  'ped-filtro': d => { S.pedFiltro = d.f; pintarPedidosEmp(); },
+  'mover-pedido': d => moverPedido(d.id, d.accion),
+  'autorizar-pedido': d => autorizarPedido(d.id, true),
+  'no-autorizar-pedido': d => autorizarPedido(d.id, false),
+  'nueva-encuesta': () => (S.clima ? formEncuesta() : cargarClima().then(() => formEncuesta())),
+  'editar-encuesta': d => formEncuesta(d.id),
+  'guardar-encuesta': () => guardarEncuestaForm(),
+  'enc-pregunta-mas': () => { $('#enc-preguntas').insertAdjacentHTML('beforeend', filaPreguntaHTML()); iconos(); contarPreguntasEncuesta(); },
+  'enc-pregunta-menos': (d, b) => { b.closest('[data-q]').remove(); contarPreguntasEncuesta(); },
+  'enc-estado': d => guardarEncuestaForm(d.estado, d.id),
+  'borrar-encuesta': d => borrarEncuesta(d.id),
+  'resultados-encuesta': d => verResultadosEncuesta(d.id),
+  'responder-encuesta': d => formResponderEncuesta(d.id),
+  'encuesta-luego': () => { cerrarModal(); siguienteVentanaInicio(); },
+  'version-ok': () => { cerrarModal(); siguienteVentanaInicio(); },
+  'ver-rif-cv': d => abrirArchivoDoc('rif', d.id),
+  'enc-escala': (d, b) => { const caja = b.closest('[data-preg]'); caja.dataset.valor = d.n; $$('.escala-btn', caja).forEach(x => x.classList.toggle('on', x === b)); },
+  'enviar-encuesta': () => enviarEncuesta(),
+  'solicitar-constancia': () => formConstancia(),
+  'enviar-constancia': () => enviarConstancia(),
+  'aprobar-constancia': d => resolverConstancia(d.id, true),
+  'rechazar-constancia': d => resolverConstancia(d.id, false),
+  'ver-constancia': d => abrirArchivo('descargarConstancia', d.id),
+  'ver-cedula-cv': d => abrirArchivoDoc('cedula', d.id),
+  'copiar-portal': () => copiarPortal()
+});
+
+/** Filtros de las secciones nuevas y cambio de departamento en las etapas del pedido. */
+document.addEventListener('DOMContentLoaded', () => {
+  let t;
+  $('#pd-buscar')?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(pintarPedidosAdmin, 200); });
+  ['#pd-estado', '#pd-depto', '#pd-prio'].forEach(x => $(x)?.addEventListener('change', pintarPedidosAdmin));
+  $('#ih-meses')?.addEventListener('change', cargarIndicadores);
+  $('#ih-depto')?.addEventListener('change', pintarIndicadores);
+  $('#modal-cuerpo').addEventListener('change', ev => {
+    if (ev.target.closest('[name=et_dep]')) $('#f-pedido').Flujo.value = 'Personalizado';
+    if (ev.target.closest('[name=enc_banco], [name=q_t]')) contarPreguntasEncuesta();
+  });
+});
+
+/* =========================================================================
+ *  22. VERSIÓN 4.1
+ *  Documentos de identidad (lectura automática y vencimientos) · ventanas al abrir la app
+ * ========================================================================= */
+/** Nombres legibles de los datos que se llenan solos al leer un documento. */
+const ETQ_DATO_DOC = { CedulaExpedicion: 'expedición de la cédula', CedulaVencimiento: 'vencimiento de la cédula', RIF: 'RIF', DomicilioFiscal: 'domicilio fiscal',
+  RifVencimiento: 'vencimiento del RIF', Nombres: 'nombres', Apellidos: 'apellidos', FechaNacimiento: 'fecha de nacimiento', EstadoCivil: 'estado civil' };
+
+/** 'vencido', 'por vencer' (próximos 30 días) o '' según la fecha de vencimiento de un documento. */
+function estadoDoc(fecha) {
+  if (!fecha) return '';
+  if (fecha < hoyStr()) return 'vencido';
+  return fecha <= sumarDias(hoyStr(), 30) ? 'por vencer' : '';
+}
+
+/** Fecha de vencimiento con su insignia de estado ("Vencido" en rojo, "Por vencer" en ámbar). */
+function fechaConEstado(fecha, prefijo = '') {
+  if (!fecha) return prefijo ? `${esc(prefijo)}: —` : '';
+  const st = estadoDoc(fecha);
+  const ins = st === 'vencido' ? ' <span class="insignia bg-rose-100 text-rose-700">Vencido</span>' : st === 'por vencer' ? ' <span class="insignia bg-amber-100 text-amber-700">Por vencer</span>' : '';
+  return `${prefijo ? esc(prefijo) + ': ' : ''}${esc(fmtFecha(fecha))}${ins}`;
+}
+
+/** Aviso en la cabecera del expediente si la cédula o el RIF están vencidos o por vencer. */
+function alertasDocumentosHTML(e) {
+  const avisos = [['cédula', e.CedulaVencimiento], ['RIF', e.RifVencimiento]].map(([doc, f]) => ({ doc, f, st: estadoDoc(f) })).filter(x => x.st);
+  if (!avisos.length) return '';
+  const vencido = avisos.some(x => x.st === 'vencido');
+  return `<p class="mt-1.5 inline-flex items-center gap-1.5 rounded-lg ${vencido ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'} px-2.5 py-1 text-xs font-semibold mr-1">
+    <i data-lucide="id-card" class="w-3.5 h-3.5"></i>${avisos.map(x => `${x.st === 'vencido' ? 'La' : 'La'} ${x.doc === 'RIF' ? 'constancia de RIF' : x.doc} ${x.st === 'vencido' ? 'venció el' : 'vence el'} ${fmtFecha(x.f)}`).join(' · ')}</p>`;
+}
+
+/** Abre la cédula o el RIF adjuntos a una postulación. */
+async function abrirArchivoDoc(doc, id) {
+  const ventana = window.open('', '_blank');
+  try {
+    const d = await api('descargarCedulaCV', { id, doc }, { texto: 'Descargando documento…' });
+    const blob = new Blob([Uint8Array.from(atob(d.base64), c => c.charCodeAt(0))], { type: d.mimeType });
+    const url = URL.createObjectURL(blob);
+    if (ventana) ventana.location.href = url; else descargarBlob(blob, d.nombre);
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (e) { if (ventana) ventana.close(); toast(e.message, 'error'); }
+}
+
+/* ---------- Ventanas al abrir la app ---------- */
+/** Decide qué ventanas mostrar al entrar: primero el aviso de la versión nueva y luego la encuesta pendiente. */
+function prepararVentanasInicio() {
+  if (S.ventanasPreparadas) return;
+  S.ventanasPreparadas = true;
+  S.ventanasInicio = [];
+  let vista = '';
+  try { vista = localStorage.getItem('aa_version_vista') || ''; } catch (e) { /* nada */ }
+  if (vista !== VERSION) S.ventanasInicio.push('version');
+  if (S.sesion.empleadoId && S.sesion.misEncuestasPendientes > 0) S.ventanasInicio.push('encuesta');
+  setTimeout(siguienteVentanaInicio, 600);
+}
+
+/** Muestra la siguiente ventana pendiente (si no hay otra ventana abierta). */
+async function siguienteVentanaInicio() {
+  const v = (S.ventanasInicio || []).shift();
+  if (!v || !$('#modal').classList.contains('hidden')) return;
+  if (v === 'version') return mostrarAvisoVersion();
+  if (v === 'encuesta') {
+    try {
+      const r = await api('misEncuestas', {}, { silencioso: true });
+      S.misEnc = r.encuestas;
+      const pendiente = r.encuestas.find(e => !e.respondida);
+      if (pendiente && $('#modal').classList.contains('hidden')) formResponderEncuesta(pendiente.ID);
+    } catch (e) { /* se puede responder luego en Trámites */ }
+  }
+}
+
+/** Aviso de actualización: nombre de la versión, fecha y hora de desarrollo y enlace al PDF de novedades. */
+function mostrarAvisoVersion() {
+  try { localStorage.setItem('aa_version_vista', VERSION); } catch (e) { /* nada */ }
+  const f = new Date(VERSION_FECHA);
+  const fecha = f.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Caracas' });
+  const hora = f.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Caracas' });
+  const novedades = [
+    ['sparkles', 'Nuevo nombre: <b>Sumanpek App</b>. Ahora es mucho más que asistencia.'],
+    ['layout-grid', 'Tu app ahora tiene tres pestañas: <b>Asistencia</b>, <b>Trabajo</b> y <b>Trámites</b>.'],
+    ['package', 'Sigue los <b>pedidos de clientes</b> entre departamentos, desde Ventas hasta la entrega.'],
+    ['file-badge', 'Pide tu <b>constancia de trabajo</b> desde el teléfono y recíbela en PDF.'],
+    ['smile', '<b>Encuestas de clima</b> de solo 3 preguntas, siempre anónimas.']
+  ];
+  abrirModal({
+    titulo: '🎉 ¡Sumanpek App se actualizó!',
+    ancho: 'sm:max-w-md',
+    cuerpo: `<div class="text-center">
+        <img src="logo.png" alt="" class="mx-auto h-16 w-16 object-contain">
+        <p class="mt-2 text-2xl font-extrabold text-navy-900">Versión ${esc(VERSION)}</p>
+        <p class="text-sm text-slate-500 cap1">Desarrollada el ${esc(fecha)}, a las ${esc(hora)}</p>
+      </div>
+      <ul class="mt-5 space-y-2.5">${novedades.map(([i, t]) => `<li class="flex items-start gap-3 text-sm text-slate-700">
+        <span class="h-8 w-8 shrink-0 rounded-lg bg-marca-50 text-marca-700 flex items-center justify-center"><i data-lucide="${i}" class="w-4 h-4"></i></span><span class="pt-1">${t}</span></li>`).join('')}</ul>
+      <a id="ver-novedades" href="novedades/v${esc(VERSION)}.pdf" target="_blank" rel="noopener" class="mt-5 flex items-center justify-center gap-2 rounded-xl border border-marca-200 bg-marca-50 px-4 py-3 text-sm font-bold text-marca-700 hover:bg-marca-100">
+        <i data-lucide="file-text" class="w-4 h-4"></i>Conoce más sobre esta actualización (PDF)</a>`,
+    pie: '<button data-acc="version-ok" class="btn-primario w-full sm:w-auto">¡Entendido!</button>'
+  });
+}
