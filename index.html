@@ -399,7 +399,7 @@
 
       </div>
       <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.<br>
-        Sumanpek App v<span class="ver-app">4.1.0</span> · © Anabel Martínez RRHH</p>
+        Sumanpek App v<span class="ver-app">4.2.0</span> · © Anabel Martínez RRHH</p>
     </main>
     <!-- v4: barra inferior de pestañas del autoservicio -->
     <nav id="mc-tabs" class="no-print fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
@@ -438,7 +438,7 @@
           <button data-acc="compartir-app" class="btn btn-sm flex-1 bg-white/10 text-white hover:bg-white/20"><i data-lucide="qr-code" class="w-4 h-4"></i>Compartir app</button>
           <button data-acc="instalar-app" class="instalar-app hidden btn btn-sm flex-1 bg-oro-400 text-navy-950 hover:bg-oro-300"><i data-lucide="download" class="w-4 h-4"></i>Instalar</button>
         </div>
-        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Sumanpek App v<span class="ver-app">4.1.0</span><br>© Anabel Martínez RRHH</p>
+        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Sumanpek App v<span class="ver-app">4.2.0</span><br>© Anabel Martínez RRHH</p>
       </div>
     </aside>
 
@@ -803,9 +803,18 @@
           <select id="pd-depto" class="campo"></select>
           <select id="pd-prio" class="campo"><option value="">Todas las prioridades</option><option>Urgente</option><option>Alta</option><option>Media</option><option>Baja</option></select>
         </div>
-        <div id="pd-resumen" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5"></div>
+        <div id="pd-resumen" class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-5"></div>
         <div id="pd-tablero" class="grid md:grid-cols-2 xl:grid-cols-4 gap-4 items-start mb-5"></div>
         <div class="tarjeta"><div id="pd-tabla" class="overflow-x-auto scroll-fino"></div></div>
+      </section>
+
+      <!-- ===== v4.2: MATERIAL FALTANTE ===== -->
+      <section id="s-materiales" class="seccion hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5"><div><h2 class="text-2xl font-extrabold text-slate-900">Material faltante</h2>
+          <p class="text-sm text-slate-500">Alertas que envían los departamentos desde su teléfono. Las recibe compras (Ajustes → Material faltante) y RRHH.</p></div>
+          <button data-acc="exportar" data-tabla="t-material" data-nombre="material" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar como CSV</button></div>
+        <div id="ma-resumen" class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5"></div>
+        <div class="tarjeta"><div id="ma-lista" class="overflow-x-auto scroll-fino"></div></div>
       </section>
 
       <!-- ===== v4: CLIMA LABORAL ===== -->
@@ -821,7 +830,7 @@
       <!-- ===== v4: CONSTANCIAS ===== -->
       <section id="s-constancias" class="seccion hidden">
         <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
-          <div><h2 class="text-2xl font-extrabold text-slate-900">Constancias de trabajo</h2>
+          <div><h2 class="text-2xl font-extrabold text-slate-900">Constancias y consultas</h2>
             <p class="text-sm text-slate-500">El personal las pide desde su teléfono; al aprobarlas, el sistema genera el PDF y lo guarda en su expediente.</p></div>
           <button data-acc="exportar" data-tabla="t-constancias" data-nombre="constancias" class="btn-sec"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i>Exportar como CSV</button>
         </div>
@@ -863,6 +872,6 @@
     </main>
   </section>
 
-  <script src="app.js?v=4.1.0"></script>
+  <script src="app.js?v=4.2.0"></script>
 </body>
 </html>

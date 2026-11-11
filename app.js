@@ -15,9 +15,9 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '4.1.2';
+const VERSION = '4.2.0';
 /** Fecha y hora en que se terminó de desarrollar esta versión (se muestra en el aviso de actualización). */
-const VERSION_FECHA = '2026-11-10T20:00:00-04:00';
+const VERSION_FECHA = '2026-11-11T19:00:00-04:00';
 const APP_NOMBRE = 'Sumanpek App';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -72,7 +72,8 @@ const SECCIONES = [
   { id: 'agenda', titulo: 'Agenda', icono: 'calendar-range' },
   { id: 'pedidos', titulo: 'Pedidos', icono: 'package' },
   { id: 'curriculums', titulo: 'Currículums', icono: 'file-user' },
-  { id: 'constancias', titulo: 'Constancias', icono: 'file-badge' },
+  { id: 'constancias', titulo: 'Constancias y consultas', icono: 'file-badge' },
+  { id: 'materiales', titulo: 'Material faltante', icono: 'wrench' },
   { id: 'clima', titulo: 'Clima laboral', icono: 'smile' },
   { id: 'indicadores', titulo: 'Indicadores históricos', icono: 'chart-line' },
   { id: 'registro', titulo: 'Registro de actividad', icono: 'scroll-text' },
@@ -300,7 +301,7 @@ function cancelarModal() {
   if (volver) { S.modalVolver = null; volver(); } else cerrarModal();
 }
 
-function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', peligro = false, conTexto = false, placeholder = '', valor = '', linea = false } = {}) {
+function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', peligro = false, conTexto = false, placeholder = '', valor = '', linea = false, opcional = false } = {}) {
   return new Promise(resolve => {
     const capa = document.createElement('div');
     capa.className = 'confirmacion fixed inset-0 z-[95] flex items-center justify-center p-4 bg-slate-900/50';
@@ -318,7 +319,7 @@ function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', peligr
       ev.stopPropagation();
       const campo = capa.querySelector('textarea, input');
       const texto = conTexto ? campo.value.trim() : '';
-      if (b.dataset.r === '1' && conTexto && !texto) { campo.focus(); return; }
+      if (b.dataset.r === '1' && conTexto && !texto && !opcional) { campo.focus(); return; }
       capa.remove();
       resolve(b.dataset.r === '1' ? (conTexto ? texto : true) : (conTexto ? null : false));
     });
@@ -376,7 +377,7 @@ function barra(delta) {
 const LECTURAS = new Set(['sesion', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
   'descargarDocumento', 'descargarSoporte', 'estadoAcceso', 'misPermisos', 'ajustes',
   'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria', 'misNotificaciones', 'pushConfig',
-  'pedidos', 'encuestas', 'resultadosEncuesta', 'misEncuestas', 'misConstancias', 'constancias', 'descargarConstancia', 'descargarCedulaCV']);
+  'alertasMaterial', 'misConsultasExtra', 'consultasExtra', 'pedidos', 'encuestas', 'resultadosEncuesta', 'misEncuestas', 'misConstancias', 'constancias', 'descargarConstancia', 'descargarCedulaCV']);
 
 async function api(action, payload = {}, { silencioso = false, texto = 'Cargando…' } = {}) {
   if (S.versionDesigual && !LECTURAS.has(action)) {
@@ -1099,8 +1100,9 @@ function mostrarAdmin() {
   actualizarInsignia(s.accesosPendientes || 0, 'empleados');
   actualizarInsignia(s.permisosPendientes || 0, 'permisos');
   actualizarInsignia(s.tareasPorAprobar || 0, 'tareas');
-  actualizarInsignia(s.pedidosPorAutorizar || 0, 'pedidos');
-  actualizarInsignia(s.constanciasPendientes || 0, 'constancias');
+  actualizarInsignia((s.pedidosPorAutorizar || 0) + (s.pedidosPorRevisar || 0), 'pedidos');
+  actualizarInsignia((s.constanciasPendientes || 0) + (s.consultasExtraPendientes || 0), 'constancias');
+  actualizarInsignia(s.materialPendiente || 0, 'materiales');
   actualizarInsignia(s.postulacionesNuevas || 0, 'curriculums');
   navegar(S.seccion === 'mi-marcaje' ? 'dashboard' : S.seccion);
 }
@@ -1136,7 +1138,7 @@ function navegar(sec) {
   ({ dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
      permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: cargarAjustes, tareas: cargarTareas,
      agenda: cargarAgenda, curriculums: cargarCurriculums, registro: cargarRegistro, ayuda: cargarAyuda,
-     pedidos: cargarPedidosAdmin, clima: cargarClima, constancias: cargarConstanciasAdmin, indicadores: cargarIndicadores })[sec]();
+     pedidos: cargarPedidosAdmin, clima: cargarClima, constancias: cargarConstanciasAdmin, indicadores: cargarIndicadores, materiales: cargarMaterialAdmin })[sec]();
   iconos();
 }
 
@@ -1256,7 +1258,7 @@ function redibujar() {
   const fn = { dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
     permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: () => {}, tareas: pintarTareas, agenda: pintarAgenda,
     curriculums: pintarCurriculums, registro: () => {}, ayuda: () => {},
-    pedidos: pintarPedidosAdmin, clima: pintarClima, constancias: pintarConstanciasAdmin, indicadores: pintarIndicadores }[S.seccion];
+    pedidos: pintarPedidosAdmin, clima: pintarClima, constancias: pintarConstanciasAdmin, indicadores: pintarIndicadores, materiales: pintarMaterialAdmin }[S.seccion];
   if (fn) fn();
 }
 
@@ -1300,6 +1302,9 @@ function resumir(filas) {
 }
 
 function calcularKPIs(empleados, asistencia, permisos, evaluaciones, desde, hasta) {
+  // v4.2: antes de la fecha de inicio del sistema no hay datos (no se cuentan ausencias)
+  const inicio = S.sesion.inicioSistema || '';
+  if (inicio && desde < inicio) desde = inicio;
   const hoy = hoyStr();
   const ahora = new Date();
   const finHoy = minutos(diaSemana(hoy) === 6 ? S.sesion.horario.salidaSabado : S.sesion.horario.salida);
@@ -1361,10 +1366,11 @@ function saldoVacaciones(e, permisos = S.permisos, hoy = hoyStr()) {
   anios = Math.max(0, anios);
   let generados = 0;
   for (let k = 1; k <= anios; k++) generados += Math.min(15 + (k - 1), 30);
+  const previos = totalVacPrevias(e);          // v4.2: días disfrutados antes del sistema
   const disfrutados = permisos.filter(p => p.EmpleadoID === e.ID && p.Tipo === 'Vacaciones' && p.Estado === 'Aprobado')
-    .reduce((s, p) => s + num(p.Dias), 0);
+    .reduce((s, p) => s + num(p.Dias), 0) + previos;
   const prox = new Date(ing); prox.setFullYear(ing.getFullYear() + anios + 1);
-  return { anios, generados, disfrutados, pendientes: generados - disfrutados, proximo: fechaStr(prox), diasProximo: Math.min(15 + anios, 30) };
+  return { anios, generados, disfrutados, previos, pendientes: generados - disfrutados, proximo: fechaStr(prox), diasProximo: Math.min(15 + anios, 30) };
 }
 
 function rotacion(empleados, desde, hasta) {
@@ -1656,6 +1662,9 @@ function pintarAlertas(depto, q) {
   (S.accesos || []).filter(x => x.Estado === 'Pendiente' && (!depto || x.Departamento === depto)).forEach(x =>
     item('user-plus', 'ambar', `Solicitud de acceso: ${x.Nombres} ${x.Apellidos}`, `${x.Departamento} · ${x.Email}`, '', 'data-acc="nav" data-sec="empleados"'));
   const ses = S.sesion;
+  if (ses.pedidosPorRevisar) item('search-check', ses.revisionAtrasada ? 'rosa' : 'ambar', `${ses.pedidosPorRevisar} trabajo${ses.pedidosPorRevisar === 1 ? '' : 's'} por revisar`, ses.revisionAtrasada ? `${ses.revisionAtrasada} lleva${ses.revisionAtrasada === 1 ? '' : 'n'} más de ${ses.horasRevision} h esperando: la producción está detenida` : 'Revísalos para que el pedido pase al siguiente departamento', '', 'data-acc="nav" data-sec="pedidos"');
+  if (ses.consultasExtraPendientes) item('timer', 'ambar', `${ses.consultasExtraPendientes} consulta${ses.consultasExtraPendientes === 1 ? '' : 's'} de horas extra`, 'Personas que quieren conocer su saldo', '', 'data-acc="nav" data-sec="constancias"');
+  if (ses.materialPendiente) item('wrench', 'ambar', `${ses.materialPendiente} alerta${ses.materialPendiente === 1 ? '' : 's'} de material faltante`, 'Departamentos que necesitan material', '', 'data-acc="nav" data-sec="materiales"');
   if (ses.pedidosPorAutorizar) item('package', 'ambar', `${ses.pedidosPorAutorizar} pedido${ses.pedidosPorAutorizar === 1 ? '' : 's'} por autorizar`, 'Ventas espera tu autorización para pasar a producción', '', 'data-acc="nav" data-sec="pedidos"');
   if (ses.constanciasPendientes) item('file-badge', 'ambar', `${ses.constanciasPendientes} constancia${ses.constanciasPendientes === 1 ? '' : 's'} por aprobar`, 'Solicitadas desde la app', '', 'data-acc="nav" data-sec="constancias"');
   if (ses.postulacionesNuevas) item('globe', 'marca', `${ses.postulacionesNuevas} postulación${ses.postulacionesNuevas === 1 ? '' : 'es'} nueva${ses.postulacionesNuevas === 1 ? '' : 's'} del portal`, 'Trabaja con nosotros', '', 'data-acc="nav" data-sec="curriculums"');
@@ -2027,7 +2036,8 @@ function expPermisos({ empleado: e, permisos }) {
   const tarjetas = v ? `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
     ${[['Años de servicio', v.anios], ['Días generados', v.generados], ['Disfrutados / programados', v.disfrutados], ['Pendientes', `<span class="${v.pendientes > 0 ? 'text-marca-700' : 'text-slate-800'}">${v.pendientes}</span>`]]
       .map(([t, x]) => `<div class="tarjeta p-4"><p class="text-xs font-semibold text-slate-500">${t}</p><p class="text-2xl font-extrabold mt-1">${x}</p></div>`).join('')}
-    </div><p class="text-xs text-slate-500 mb-5">Próximo aniversario: <b>${fmtFecha(v.proximo)}</b> · le corresponderán <b>${v.diasProximo}</b> días hábiles. Para cargar vacaciones disfrutadas antes del sistema, registra un permiso de tipo "Vacaciones" aprobado con los días correspondientes.</p>` : '';
+    </div><p class="text-xs text-slate-500 mb-5">Próximo aniversario: <b>${fmtFecha(v.proximo)}</b> · le corresponderán <b>${v.diasProximo}</b> días hábiles. ${v.previos ? `Incluye <b>${v.previos}</b> día(s) disfrutados antes del sistema.` : ''}</p>
+    <button data-acc="vac-previas" data-id="${esc(e.ID)}" class="btn-sec btn-sm mb-5 solo-rrhh no-print"><i data-lucide="calendar-check" class="w-4 h-4"></i>Vacaciones tomadas antes del sistema</button>` : '';
   const filas = permisos.length ? `<div class="tarjeta overflow-x-auto"><table class="tabla"><thead><tr><th>Tipo</th><th>Desde</th><th>Hasta</th><th class="text-right">Días</th><th>Estado</th><th>Observación</th><th class="no-print"></th></tr></thead><tbody>
     ${permisos.map(p => `<tr><td class="font-medium">${esc(p.Tipo)}</td><td>${fmtFecha(p.FechaInicio)}</td><td>${fmtFecha(p.FechaFin)}</td><td class="text-right">${esc(p.Dias)}</td><td>${insigniaEstado(p.Estado)}</td><td class="envolver text-xs text-slate-500">${esc(p.Observacion)}</td>
       <td class="text-right no-print whitespace-nowrap solo-rrhh"><button data-acc="editar-permiso" data-id="${esc(p.ID)}" class="btn-fantasma btn-sm"><i data-lucide="pencil" class="w-4 h-4"></i></button><button data-acc="borrar-permiso" data-id="${esc(p.ID)}" class="btn-fantasma btn-sm text-rose-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('')}
@@ -2953,6 +2963,13 @@ async function anularMiPermiso(id) {
 async function pintarEmpleadoMesDash() {
   const cont = $('#dash-mes-cuerpo'), per = $('#dash-mes-periodo')?.value;
   if (!cont || !per) return;
+  // v4.2: si el mes anterior es previo a la fecha de inicio del sistema, se muestra el mes actual
+  const sel = $('#dash-mes-periodo'), actual = hoyStr().slice(0, 7);
+  if (!S.mesAjustado && S.sesion.inicioSistema && `${per}-31` < S.sesion.inicioSistema) {
+    S.mesAjustado = true; sel.value = actual;
+    const etq = sel.closest('.selector-mes')?.querySelector('[data-etq]'); if (etq) etq.textContent = fmtPeriodo(actual);
+    return pintarEmpleadoMesDash();
+  }
   const [y, m] = per.split('-').map(Number);
   const hoy = hoyStr(), desde = `${per}-01`, fin = fechaStr(new Date(y, m, 0)), hasta = fin > hoy ? hoy : fin;
   if (desde > hoy) { cont.innerHTML = '<p class="lg:col-span-5 text-sm text-slate-400 text-center py-6">Elige un mes que ya haya comenzado.</p>'; return; }
@@ -2960,9 +2977,10 @@ async function pintarEmpleadoMesDash() {
   const asis = S.store.asistencia.filter(a => a.Fecha >= desde && a.Fecha <= hasta);
   const emps = empleadosDelPeriodo(desde, hasta, '', '').filter(e => e.Estado !== 'Inactivo');
   const k = calcularKPIs(emps, asis, S.permisos, S.evaluaciones, desde, hasta);
+  if (!S.ped) await cargarPedidos();
   const rank = k.filas.filter(r => r.asistidos > 0 && r.esperados > 0).map(r => {
-    const p = r.pctPuntualidad ?? 0, a = r.pctAsistencia ?? 100;
-    return Object.assign({ puntaje: r.evalProm !== null ? p * 0.4 + a * 0.3 + r.evalProm * 0.3 : p * 0.55 + a * 0.45 }, r);
+    const prod = produccionDe({ email: r.e.Email }, desde, hasta);
+    return Object.assign({ puntaje: puntajeMes(r, prod.puntaje), prod }, r);
   }).sort((a, b) => b.puntaje - a.puntaje || a.minRetraso - b.minRetraso || b.minTrabajados - a.minTrabajados).slice(0, 5);
   const rec = (S.reconocimientos || []).find(x => x.Periodo === per && x.Tipo !== 'DEPARTAMENTO');
   const g = rec ? empPorId(rec.EmpleadoID) : null;
@@ -2985,14 +3003,14 @@ async function pintarEmpleadoMesDash() {
         ${avatarHTML(r.e.FotoMini, nombreCompleto(r.e))}
         <div class="flex-1 min-w-0">
           <button data-acc="ver-expediente" data-id="${esc(r.e.ID)}" class="block font-semibold text-slate-800 hover:text-marca-700 truncate text-left">${esc(nombreCompleto(r.e))}</button>
-          <p class="text-xs text-slate-500 truncate">${esc(r.e.Departamento)} · puntualidad ${fmtPct(r.pctPuntualidad)} · asistencia ${fmtPct(r.pctAsistencia)}${r.evalProm !== null ? ` · desempeño ${fmtNum(r.evalProm)}` : ''}</p>
+          <p class="text-xs text-slate-500 truncate">${esc(r.e.Departamento)} · puntualidad ${fmtPct(r.pctPuntualidad)} · asistencia ${fmtPct(r.pctAsistencia)}${r.evalProm !== null ? ` · desempeño ${fmtNum(r.evalProm)}` : ''}${r.prod && r.prod.puntaje !== null ? ` · producción ${fmtNum(r.prod.puntaje)}${r.prod.rechazos ? ` (${r.prod.rechazos} rechazo${r.prod.rechazos === 1 ? '' : 's'})` : ''}` : ''}</p>
         </div>
         <span class="text-lg font-extrabold tabular-nums ${colorPuntaje(r.puntaje)}">${fmtNum(r.puntaje)}</span>
         <button data-acc="reconocer" data-id="${esc(r.e.ID)}" data-puntaje="${r.puntaje.toFixed(1)}" class="btn btn-sm bg-oro-400 text-navy-950 hover:bg-oro-300 solo-rrhh no-print">Reconocer</button>
       </div>`).join('')}</div>`
     : '<p class="text-sm text-slate-400 text-center py-8">No hay marcajes en ese mes para calcular el ranking.</p>';
   cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}</div>`;
-  pintarDeptoMesDash(per, k.filas);
+  pintarDeptoMesDash(per, k.filas, desde, hasta);
   iconos();
 }
 
@@ -3367,6 +3385,7 @@ function pintarAjustes() {
           <button type="button" data-acc="aj-recalcular" class="btn-sec btn-sm"><i data-lucide="calculator" class="w-4 h-4"></i>Recalcular asistencia</button>
         </div>
       </div>
+      ${ajustesV42HTML(c, departamentos, campo, interruptor, dis)}
       ${ajustesV4HTML(c, departamentos, campo, interruptor, dis)}
       <div class="tarjeta p-5">
         <h3 class="titulo-tarjeta mb-3">Apariencia de este dispositivo</h3>
@@ -3392,6 +3411,9 @@ async function guardarAjustesForm() {
   });
   cfg.DIAS_LABORABLES = $$('[name=dia]:checked', f).map(i => i.value).join(',');
   if ($('[name=pedDep]', f)) cfg.PEDIDOS_DEPARTAMENTOS = $$('[name=pedDep]:checked', f).map(i => i.value).join(', ');
+  if ($('[name=matDep]', f)) cfg.MATERIAL_DEPARTAMENTOS = $$('[name=matDep]:checked', f).map(i => i.value).join(', ');
+  const pesos = ['PESO_PUNTUALIDAD', 'PESO_ASISTENCIA', 'PESO_EVALUACION', 'PESO_PRODUCCION'].map(k => num(cfg[k]));
+  if (['PESO_PUNTUALIDAD', 'PESO_ASISTENCIA', 'PESO_EVALUACION', 'PESO_PRODUCCION'].every(k => cfg[k] !== undefined) && pesos.reduce((a, b) => a + b, 0) !== 100) return toast(`Los pesos del empleado del mes deben sumar 100% (ahora suman ${pesos.reduce((a, b) => a + b, 0)}%).`, 'aviso');
   if (!cfg.DIAS_LABORABLES) return toast('Elige al menos un día laborable.', 'aviso');
   try {
     const r = await api('guardarAjustes', { config: cfg }, { texto: 'Guardando ajustes…' });
@@ -3541,7 +3563,7 @@ function pintarDeptoMes() {
     </div>`;
 }
 
-function pintarDeptoMesDash(per, filas) {
+function pintarDeptoMesDash(per, filas, desde, hasta) {
   const cont = $('#dash-dmes-cuerpo');
   if (!cont) return;
   const g = {};
@@ -3550,11 +3572,17 @@ function pintarDeptoMesDash(per, filas) {
     const p = r.pctPuntualidad ?? 0, a = r.pctAsistencia ?? 100;
     const d = r.e.Departamento || 'Sin departamento';
     (g[d] = g[d] || { d, pts: [], punt: [], asis: [], ev: [] });
-    g[d].pts.push(r.evalProm !== null ? p * 0.4 + a * 0.3 + r.evalProm * 0.3 : p * 0.55 + a * 0.45);
+    g[d].pts.push(puntajeMes(r, null));
     g[d].punt.push(p); g[d].asis.push(a);
     if (r.evalProm !== null) g[d].ev.push(r.evalProm);
   });
-  const rank = Object.values(g).map(x => ({ d: x.d, n: x.pts.length, puntaje: prom(x.pts), punt: prom(x.punt), asis: prom(x.asis), ev: x.ev.length ? prom(x.ev) : null }))
+  const rank = Object.values(g).map(x => {
+    // v4.2: la producción del departamento (etapas aprobadas y rechazos de RRHH) suma con su peso
+    const prod = produccionDe({ dep: x.d }, desde, hasta);
+    const base = prom(x.pts), w = S.sesion.pesosMes || {};
+    const puntaje = prod.puntaje === null || !w.produccion ? base : (base * (100 - w.produccion) + prod.puntaje * w.produccion) / 100;
+    return { d: x.d, n: x.pts.length, puntaje, punt: prom(x.punt), asis: prom(x.asis), ev: x.ev.length ? prom(x.ev) : null, prod };
+  })
     .sort((a, b) => b.puntaje - a.puntaje || b.n - a.n);
   const rec = (S.reconocimientos || []).find(x => x.Periodo === per && x.Tipo === 'DEPARTAMENTO');
   const izq = rec ? `<div class="h-full rounded-2xl p-5 text-center bg-gradient-to-br from-navy-50 via-white to-oro-50 border border-navy-200">
@@ -4492,7 +4520,7 @@ const PUSH_CFG_URL = () => new URL('__push_cfg', location.origin + location.path
 const ICONO_NOTIF = { TAREA: ['square-kanban', 'bg-sky-50 text-sky-700'], PERMISO: ['plane', 'bg-emerald-50 text-emerald-700'], MARCAJE: ['clock', 'bg-amber-50 text-amber-700'],
   AGENDA: ['calendar-days', 'bg-violet-50 text-violet-700'], RECONOCIMIENTO: ['trophy', 'bg-oro-100 text-oro-700'], ACCESO: ['user-plus', 'bg-marca-50 text-marca-700'],
   CIERRE: ['alarm-clock', 'bg-rose-50 text-rose-700'], PRUEBA: ['bell-ring', 'bg-navy-50 text-navy-700'],
-  PEDIDO: ['package', 'bg-marca-50 text-marca-700'], ENCUESTA: ['smile', 'bg-emerald-50 text-emerald-700'] };
+  PEDIDO: ['package', 'bg-marca-50 text-marca-700'], MATERIAL: ['wrench', 'bg-amber-50 text-amber-700'], ENCUESTA: ['smile', 'bg-emerald-50 text-emerald-700'] };
 
 const enModoApp = () => window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 const soportaPush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && location.protocol === 'https:';
@@ -4714,8 +4742,9 @@ const CAT_REGISTRO = {
   'Desempeño y reconocimientos': ['EVALUACION_CREADA', 'EVALUACION_EDITADA', 'EVALUACION_ELIMINADA', 'EMPLEADO_DEL_MES', 'EMPLEADO_DEL_MES_QUITADO', 'DEPARTAMENTO_DEL_MES'],
   'Tareas y agenda': ['TAREA_CREADA', 'TAREA_EDITADA', 'TAREA_MOVIDA', 'TAREA_ELIMINADA', 'TAREA_PROPUESTA', 'TAREA_APROBADA', 'TAREA_RECHAZADA', 'TAREA_RETIRADA',
     'EVENTO_CREADO', 'EVENTO_EDITADO', 'EVENTO_ELIMINADO'],
-  'Pedidos': ['PEDIDO_CREADO', 'PEDIDO_EDITADO', 'PEDIDO_AUTORIZADO', 'PEDIDO_NO_AUTORIZADO', 'PEDIDO_TOMAR', 'PEDIDO_LISTO', 'PEDIDO_DEVOLVER', 'PEDIDO_AVISADO', 'PEDIDO_ENTREGADO', 'PEDIDO_CANCELAR'],
-  'Clima y constancias': ['ENCUESTA_CREADA', 'ENCUESTA_EDITADA', 'ENCUESTA_ELIMINADA', 'ENCUESTA_RESPONDIDA', 'CONSTANCIA_SOLICITADA', 'CONSTANCIA_EMITIDA', 'CONSTANCIA_RECHAZADA'],
+  'Material': ['MATERIAL_ALERTA', 'MATERIAL_EN_COMPRA', 'MATERIAL_RESUELTO', 'MATERIAL_ANULADA'],
+  'Pedidos': ['PEDIDO_APROBADO_RRHH', 'PEDIDO_RECHAZADO_RRHH', 'PEDIDO_CREADO', 'PEDIDO_EDITADO', 'PEDIDO_AUTORIZADO', 'PEDIDO_NO_AUTORIZADO', 'PEDIDO_TOMAR', 'PEDIDO_LISTO', 'PEDIDO_DEVOLVER', 'PEDIDO_AVISADO', 'PEDIDO_ENTREGADO', 'PEDIDO_CANCELAR'],
+  'Clima y constancias': ['CONSULTA_EXTRA_PEDIDA', 'CONSULTA_EXTRA_RESPONDIDA', 'CONSULTA_EXTRA_NO_COMPARTIDA', 'VACACIONES_PREVIAS', 'ENCUESTA_CREADA', 'ENCUESTA_EDITADA', 'ENCUESTA_ELIMINADA', 'ENCUESTA_RESPONDIDA', 'CONSTANCIA_SOLICITADA', 'CONSTANCIA_EMITIDA', 'CONSTANCIA_RECHAZADA'],
   'Currículums': ['POSTULACION_PORTAL', 'CURRICULUM_REGISTRADO', 'CURRICULUM_EDITADO', 'CURRICULUM_CALIFICADO', 'CURRICULUM_ELIMINADO'],
   'Ajustes y sistema': ['AJUSTES', 'DEPARTAMENTO_CREADO', 'DEPARTAMENTO_RENOMBRADO', 'DEPARTAMENTO_ACTIVADO', 'DEPARTAMENTO_DESACTIVADO', 'DEPARTAMENTO_ELIMINADO', 'RESPALDO',
     'NOTIFICACIONES_ACTIVADAS', 'NOTIFICACIONES_DESACTIVADAS', 'MIGRACION_CARGOS']
@@ -4730,6 +4759,10 @@ const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJ
   PAUSA_REGISTRADA: 'Registró una pausa', PAUSA_ELIMINADA: 'Quitó una pausa', PEDIDO_CREADO: 'Creó un pedido', PEDIDO_EDITADO: 'Editó un pedido',
   PEDIDO_AUTORIZADO: 'Autorizó un pedido', PEDIDO_NO_AUTORIZADO: 'No autorizó un pedido', PEDIDO_TOMAR: 'Tomó un pedido', PEDIDO_LISTO: 'Terminó una etapa',
   PEDIDO_DEVOLVER: 'Devolvió un pedido', PEDIDO_AVISADO: 'Avisó al cliente', PEDIDO_ENTREGADO: 'Entregó un pedido', PEDIDO_CANCELAR: 'Canceló un pedido',
+  PEDIDO_APROBADO_RRHH: 'RRHH aprobó el trabajo de una etapa', PEDIDO_RECHAZADO_RRHH: 'RRHH rechazó el trabajo de una etapa',
+  MATERIAL_ALERTA: 'Avisó que falta material', MATERIAL_EN_COMPRA: 'Material en compra', MATERIAL_RESUELTO: 'Material resuelto', MATERIAL_ANULADA: 'Alerta de material anulada',
+  CONSULTA_EXTRA_PEDIDA: 'Pidió conocer sus horas extra', CONSULTA_EXTRA_RESPONDIDA: 'Compartió un saldo de horas extra', CONSULTA_EXTRA_NO_COMPARTIDA: 'No compartió un saldo de horas extra',
+  VACACIONES_PREVIAS: 'Registró vacaciones previas al sistema',
   POSTULACION_PORTAL: 'Postulación desde el portal', DOCUMENTO_LEIDO: 'Datos leídos de un documento', ENCUESTA_CREADA: 'Creó una encuesta', ENCUESTA_EDITADA: 'Editó una encuesta', ENCUESTA_ELIMINADA: 'Eliminó una encuesta',
   ENCUESTA_RESPONDIDA: 'Respuesta anónima a una encuesta', CONSTANCIA_SOLICITADA: 'Pidió una constancia', CONSTANCIA_EMITIDA: 'Emitió una constancia', CONSTANCIA_RECHAZADA: 'Rechazó una constancia' };
 const etiquetaAccion = a => ETIQUETA_ACCION[a] || (a.charAt(0) + a.slice(1).toLowerCase().replace(/_/g, ' '))
@@ -5149,7 +5182,7 @@ document.addEventListener('DOMContentLoaded', () => {
  *  Encuestas de clima · Constancias · Indicadores históricos · Portal de empleo
  * ========================================================================= */
 const TABS_EMP = ['asistencia', 'trabajo', 'tramites'];
-const CON_INSIGNIA = ['asistencia', 'empleados', 'permisos', 'tareas', 'pedidos', 'constancias', 'curriculums'];
+const CON_INSIGNIA = ['asistencia', 'empleados', 'permisos', 'tareas', 'pedidos', 'constancias', 'curriculums', 'materiales'];
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const URL_PORTAL = APP_URL + 'trabaja.html';
 
@@ -5228,14 +5261,14 @@ function cambiarTabEmp(tab, { primera = false } = {}) {
 /** Vuelve a cargar los datos de la pestaña visible. */
 function refrescarTabEmp() {
   if (S.tabEmp === 'asistencia') { cargarHistorial(); cargarMisSolicitudes(); }
-  if (S.tabEmp === 'trabajo') { cargarPedidos(); cargarMiAgenda(); }
+  if (S.tabEmp === 'trabajo') { cargarPedidos(); cargarMaterial(); cargarMiAgenda(); }
   if (S.tabEmp === 'tramites') { cargarTramites(); cargarMisPermisos(); }
 }
 
 function pintarInsigniasEmp() {
   const s = S.sesion || {};
   const marca = (k, n) => $$(`[data-insignia-emp="${k}"]`).forEach(b => { b.textContent = n; b.classList.toggle('hidden', !n); });
-  marca('trabajo', s.misPedidosActivos || 0);
+  marca('trabajo', (s.misPedidosActivos || 0) + (s.recibeMaterial ? s.materialPendiente || 0 : 0));
   marca('tramites', s.misEncuestasPendientes || 0);
 }
 
@@ -5394,14 +5427,15 @@ async function cargarPedidos({ silencioso = true } = {}) {
 const etapaActual = x => x.Etapas[x.EtapaActual] || null;
 /** ¿La etapa le corresponde a esta persona? (es la responsable o es de su departamento) */
 const esMiEtapa = et => !!et && !!S.sesion.empleadoId && normalizar(et.dep) === normalizar(S.sesion.departamento);
-const pedidoEsMiTurno = x => x.Estado === 'En producción' && esMiEtapa(etapaActual(x));
+const pedidoEsMiTurno = x => x.Estado === 'En producción' && esMiEtapa(etapaActual(x)) && etapaActual(x).estado !== 'Por revisar';
+const porRevisar = x => x.Estado === 'En producción' && etapaActual(x)?.estado === 'Por revisar';
 
 /** Barra de etapas: Ventas → Diseño → Impresión → … → Cliente. */
 function etapasHTML(x) {
   const color = (et, i) => {
     if (x.Estado === 'Cancelado' || x.Estado === 'No autorizado') return 'bg-slate-200 text-slate-500';
     if (et.estado === 'Listo') return 'bg-emerald-500 text-white';
-    if (i === x.EtapaActual && x.Estado === 'En producción') return et.estado === 'En proceso' ? 'bg-marca-700 text-white' : 'bg-oro-400 text-navy-950';
+    if (i === x.EtapaActual && x.Estado === 'En producción') return et.estado === 'Por revisar' ? 'bg-violet-600 text-white' : et.estado === 'En proceso' ? 'bg-marca-700 text-white' : 'bg-oro-400 text-navy-950';
     return 'bg-slate-200 text-slate-500';
   };
   const cerrado = ['Entregado'].includes(x.Estado), listo = ['Listo para entregar', 'Cliente avisado', 'Entregado'].includes(x.Estado);
@@ -5416,6 +5450,10 @@ function accionesPedidoHTML(x) {
   const s = S.sesion, rr = s.rol === 'RRHH', creador = x.CreadoPor === s.email, et = etapaActual(x), b = [];
   const btn = (acc, txt, icono, cls = 'btn-sec', extra = '') => `<button data-acc="${acc}" data-id="${esc(x.ID)}" ${extra} class="${cls} btn-sm"><i data-lucide="${icono}" class="w-4 h-4"></i>${txt}</button>`;
   if (x.Estado === 'Por autorizar' && rr) { b.push(btn('autorizar-pedido', 'Autorizar', 'check', 'btn-primario')); b.push(btn('no-autorizar-pedido', 'No autorizar', 'x')); }
+  if (porRevisar(x)) {
+    if (rr) { b.push(btn('revisar-pedido', 'Aprobar trabajo', 'check-check', 'btn-primario', 'data-ok="1"')); b.push(btn('revisar-pedido', 'Rechazar', 'x', 'btn-sec', 'data-ok="0"')); }
+    return b.join('') + (rr ? '' : `<span class="text-xs font-semibold text-violet-700 py-1.5">🔎 Esperando la revisión de RRHH</span>`);
+  }
   if (x.Estado === 'En producción' && (rr || esMiEtapa(et))) {
     if (et.estado === 'Pendiente') b.push(btn('mover-pedido', 'Tomar', 'hand', 'btn-sec', 'data-accion="tomar"'));
     b.push(btn('mover-pedido', 'Listo: pasar a ' + (x.Etapas[x.EtapaActual + 1] ? x.Etapas[x.EtapaActual + 1].dep : 'Ventas'), 'circle-check', 'btn-primario', 'data-accion="listo"'));
@@ -5441,7 +5479,7 @@ function tarjetaPedido(x) {
       </div>
       <ul class="mt-2 text-sm text-slate-700 space-y-0.5">${x.Items.slice(0, 4).map(i => `<li><b class="tabular-nums">${esc(fmtNum(i.c))}</b> × ${esc(i.d)}</li>`).join('')}${x.Items.length > 4 ? `<li class="text-xs text-slate-400">y ${x.Items.length - 4} más…</li>` : ''}</ul>
       <p class="mt-1 text-xs ${vence === 'vencido' ? 'text-rose-600 font-semibold' : vence === 'pronto' ? 'text-amber-600 font-semibold' : 'text-slate-500'}">
-        ${x.FechaLimite ? `Entrega: ${esc(fmtFechaCorta(x.FechaLimite))}${vence === 'vencido' ? ' (vencido)' : ''}` : 'Sin fecha de entrega'}${et && x.Estado === 'En producción' ? ` · En ${esc(et.dep)}${et.estado === 'En proceso' ? ' (en proceso)' : ''}` : ''}</p>
+        ${x.FechaLimite ? `Entrega: ${esc(fmtFechaCorta(x.FechaLimite))}${vence === 'vencido' ? ' (vencido)' : ''}` : 'Sin fecha de entrega'}${et && x.Estado === 'En producción' ? ` · En ${esc(et.dep)}${et.estado === 'En proceso' ? ' (en proceso)' : et.estado === 'Por revisar' ? ' (revisión de RRHH)' : ''}` : ''}</p>
       <div class="mt-3">${etapasHTML(x)}</div>
     </button>
     ${x.Estado === 'No autorizado' && x.Motivo ? `<p class="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><b>Motivo:</b> ${esc(x.Motivo)}</p>` : ''}
@@ -5456,7 +5494,7 @@ function pintarPedidosEmp() {
   if (!el || !S.ped) return;
   const lista = S.ped.pedidos;
   const grupos = {
-    turno: lista.filter(pedidoEsMiTurno),
+    turno: lista.filter(x => pedidoEsMiTurno(x) || (porRevisar(x) && esMiEtapa(etapaActual(x)))),   // también lo que espera revisión de RRHH
     mios: lista.filter(x => x.CreadoPor === S.sesion.email && PEDIDO_ACTIVO.includes(x.Estado)),
     activos: lista.filter(x => PEDIDO_ACTIVO.includes(x.Estado)),
     cerrados: lista.filter(x => !PEDIDO_ACTIVO.includes(x.Estado))
@@ -5466,7 +5504,7 @@ function pintarPedidosEmp() {
   const visibles = (grupos[S.pedFiltro] || []).slice().sort((a, b) => (ORDEN_PRIORIDAD[a.Prioridad] - ORDEN_PRIORIDAD[b.Prioridad]) || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9')));
   el.innerHTML = `<div class="tarjeta">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-        <div class="min-w-0"><h3 class="titulo-tarjeta">🧾 Pedidos de clientes</h3><p class="text-xs text-slate-400">${grupos.turno.length ? `${grupos.turno.length} esperando por tu departamento` : 'Nada pendiente en tu etapa'}</p></div>
+        <div class="min-w-0"><h3 class="titulo-tarjeta">🧾 Pedidos de clientes</h3><p class="text-xs text-slate-400">${lista.filter(pedidoEsMiTurno).length ? `${lista.filter(pedidoEsMiTurno).length} esperando por tu departamento` : 'Nada pendiente en tu etapa'}</p></div>
         ${S.ped.puedeCrear ? '<button data-acc="nuevo-pedido" class="btn-primario btn-sm shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Nuevo</button>' : ''}
       </div>
       <div class="px-4 py-3 flex gap-2 overflow-x-auto scroll-fino">${Object.keys(etiquetas).filter(k => k !== 'mios' || S.ped.puedeCrear).map(k => `<button data-acc="ped-filtro" data-f="${k}"
@@ -5496,6 +5534,7 @@ function verPedido(id) {
       ${x.Descripcion ? `<div><p class="etiqueta">Descripción</p><p class="text-sm whitespace-pre-line">${esc(x.Descripcion)}</p></div>` : ''}
       <div><p class="etiqueta">Etapas y responsables</p><div class="space-y-1.5">${x.Etapas.map((e, i) => `<div class="flex items-center gap-2 text-sm"><span class="etapa-punto ${e.estado === 'Listo' ? 'bg-emerald-500 text-white' : i === x.EtapaActual && x.Estado === 'En producción' ? 'bg-oro-400 text-navy-950' : 'bg-slate-200 text-slate-500'}">${i + 1}</span>
         <b>${esc(e.dep)}</b><span class="text-slate-500">· ${esc(e.estado || 'Pendiente')}${e.fin ? ' el ' + esc(String(e.fin).slice(0, 16)) : ''}</span></div>`).join('')}</div></div>
+      ${(x.Errores || []).length ? `<div><p class="etiqueta">Rechazos de RRHH (cuentan como errores del departamento)</p><div class="space-y-1">${x.Errores.map(e => `<p class="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><b>${esc(e.dep)}</b> · ${esc(String(e.fecha).slice(0, 16))} · ${esc(e.motivo)}${e.perdida ? ` · <b>Pérdida de material:</b> ${esc(e.detalle)}` : ''}</p>`).join('')}</div></div>` : ''}
       <div><p class="etiqueta">Historial</p><div class="space-y-1 text-xs text-slate-600">${x.Historial.slice().reverse().map(h => `<p><span class="text-slate-400">${esc(String(h[0]).slice(0, 16))}</span> · ${esc(h[1])}${rr ? ` <span class="text-slate-400">(${esc(h[2])})</span>` : ''}</p>`).join('')}</div></div>
     </div>`,
     pie: `<div class="flex flex-wrap gap-2 mr-auto">${S.sesion.rol === 'DIRECCION' ? '' : accionesPedidoHTML(x)}</div><button data-acc="cerrar-modal" class="btn-sec">Cerrar</button>`
@@ -5640,13 +5679,14 @@ function pintarPedidosAdmin() {
   const vencidos = activos.filter(x => x.FechaLimite && x.FechaLimite < hoyStr() && x.Estado !== 'Cliente avisado');
   $('#pd-resumen').innerHTML = [
     tarjetaKPI('hourglass', 'Por autorizar', todos.filter(x => x.Estado === 'Por autorizar').length, 'Esperan la aprobación de RRHH', 'violeta'),
+    tarjetaKPI('search-check', 'Por revisar', todos.filter(porRevisar).length, 'Trabajos terminados que RRHH debe revisar', 'ambar'),
     tarjetaKPI('factory', 'En producción', todos.filter(x => x.Estado === 'En producción').length, 'Pasando por los departamentos', 'azul'),
     tarjetaKPI('package-check', 'Listos para entregar', todos.filter(x => ['Listo para entregar', 'Cliente avisado'].includes(x.Estado)).length, 'Ventas debe avisar o entregar', 'verde'),
     tarjetaKPI('alarm-clock', 'Vencidos', vencidos.length, 'Pasaron su fecha de entrega', 'rosa')
   ].join('');
   const columnas = [
-    { t: 'Por autorizar', f: x => x.Estado === 'Por autorizar' },
-    { t: 'En producción', f: x => x.Estado === 'En producción' },
+    { t: 'Por autorizar / revisar', f: x => x.Estado === 'Por autorizar' || porRevisar(x) },
+    { t: 'En producción', f: x => x.Estado === 'En producción' && !porRevisar(x) },
     { t: 'Listos / cliente avisado', f: x => ['Listo para entregar', 'Cliente avisado'].includes(x.Estado) },
     { t: 'Cerrados', f: x => !PEDIDO_ACTIVO.includes(x.Estado) }
   ];
@@ -5659,10 +5699,11 @@ function pintarPedidosAdmin() {
     { t: 'Productos', v: x => esc(x.Items.map(i => fmtNum(i.c) + ' × ' + i.d).join(', ')), c: x => x.Items.map(i => i.c + ' x ' + i.d).join('; ') },
     { t: 'Prioridad', v: x => `<span class="insignia ${ESTILO_PRIORIDAD[x.Prioridad] || ''}">${esc(x.Prioridad)}</span>`, s: x => ORDEN_PRIORIDAD[x.Prioridad], c: x => x.Prioridad },
     { t: 'Entrega', v: x => esc(fmtFecha(x.FechaLimite)), s: x => x.FechaLimite || '9', c: x => x.FechaLimite },
-    { t: 'Etapa', v: x => x.Estado === 'En producción' ? esc(etapaActual(x)?.dep || '') : '—', c: x => x.Estado === 'En producción' ? etapaActual(x)?.dep : '' },
+    { t: 'Etapa', v: x => x.Estado === 'En producción' ? esc(etapaActual(x)?.dep || '') + (porRevisar(x) ? ' <span class="insignia bg-violet-100 text-violet-700">Por revisar</span>' : '') : '—', c: x => x.Estado === 'En producción' ? etapaActual(x)?.dep : '' },
     { t: 'Flujo', v: x => esc(x.Etapas.map(e => e.dep).join(' → ')), c: x => x.Etapas.map(e => e.dep + ' (' + (e.estado || 'Pendiente') + ')').join(' > ') },
     { t: 'Estado', v: x => `<span class="insignia ${ESTILO_PEDIDO[x.Estado] || ''}">${esc(x.Estado)}</span>`, s: x => x.Estado, c: x => x.Estado },
     { t: 'Registró', v: x => esc(x.CreadorNombre || x.CreadoPor), c: x => x.CreadorNombre || x.CreadoPor },
+    { t: 'Rechazos', v: x => (x.Errores || []).length ? `<span class="insignia bg-rose-100 text-rose-700">${x.Errores.length}${x.Errores.some(e => e.perdida) ? ' · pérdida' : ''}</span>` : '—', s: x => (x.Errores || []).length, c: x => (x.Errores || []).map(e => e.dep + ': ' + e.motivo + (e.perdida ? ' (pérdida: ' + e.detalle + ')' : '')).join(' | ') },
     { t: 'Creado', v: x => esc(String(x.Creado).slice(0, 10)), s: x => x.Creado, c: x => x.Creado, cls: 'hidden' }
   ], lista, { vacio: todos.length ? 'Ningún pedido coincide con los filtros.' : 'Todavía no hay pedidos. Ventas los registra desde la app (pestaña Trabajo).' });
   iconos();
@@ -5673,8 +5714,8 @@ async function cargarTramites() {
   if (!$('#mc-encuestas')) return;
   if (!S.sesion?.empleadoId) { $('#mc-encuestas').innerHTML = ''; $('#mc-constancias').innerHTML = ''; return; }
   try {
-    const [enc, cons] = await Promise.all([api('misEncuestas', {}, { silencioso: true }), api('misConstancias', {}, { silencioso: true })]);
-    S.misEnc = enc.encuestas; S.misCons = cons;
+    const [enc, cons, hx] = await Promise.all([api('misEncuestas', {}, { silencioso: true }), api('misConstancias', {}, { silencioso: true }), api('misConsultasExtra', {}, { silencioso: true })]);
+    S.misEnc = enc.encuestas; S.misCons = cons; S.misHx = hx;
     S.sesion.misEncuestasPendientes = S.misEnc.filter(e => !e.respondida).length;
     pintarInsigniasEmp();
     pintarTramites();
@@ -5691,6 +5732,7 @@ function pintarTramites() {
       <span class="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${e.respondida ? 'bg-emerald-50 text-emerald-700' : 'bg-oro-100 text-oro-700'}"><i data-lucide="${e.respondida ? 'check' : 'smile'}" class="w-5 h-5"></i></span>
       <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800">${esc(e.Titulo)}</p><p class="text-xs text-slate-500">${e.Preguntas.length} preguntas${e.Cierre ? ' · hasta el ' + esc(fmtFecha(e.Cierre)) : ''}</p></div>
       ${e.respondida ? '<span class="text-xs font-semibold text-emerald-700">Respondida</span>' : `<button data-acc="responder-encuesta" data-id="${esc(e.ID)}" class="btn-primario btn-sm">Responder</button>`}</div>`).join('')}</div></div>` : '';
+  pintarMisHorasExtra();
   const cons = S.misCons || [];
   $('#mc-constancias').innerHTML = `<div class="tarjeta">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
@@ -5902,7 +5944,7 @@ async function verResultadosEncuesta(id) {
 
 /* ---------- Panel: constancias ---------- */
 async function cargarConstanciasAdmin() {
-  try { S.cons = await api('constancias', {}, { silencioso: !!S.cons }); if (!S.empleados.length) await asegurarCatalogo(); pintarConstanciasAdmin(); } catch (e) { toast(e.message, 'error'); }
+  try { [S.cons, S.hx] = await Promise.all([api('constancias', {}, { silencioso: !!S.cons }), api('consultasExtra', {}, { silencioso: true })]); if (!S.empleados.length) await asegurarCatalogo(); pintarConstanciasAdmin(); } catch (e) { toast(e.message, 'error'); }
 }
 
 function pintarConstanciasAdmin() {
@@ -5920,6 +5962,7 @@ function pintarConstanciasAdmin() {
     { t: '', v: c => `<div class="flex justify-end gap-1 whitespace-nowrap no-print">${c.Estado === 'Pendiente' ? `<button data-acc="aprobar-constancia" data-id="${esc(c.ID)}" class="solo-rrhh btn-primario btn-sm"><i data-lucide="check" class="w-4 h-4"></i>Aprobar y generar</button>
         <button data-acc="rechazar-constancia" data-id="${esc(c.ID)}" class="solo-rrhh btn-sec btn-sm">Rechazar</button>` : ''}${c.FileID ? `<button data-acc="ver-constancia" data-id="${esc(c.ID)}" class="btn-fantasma btn-sm" title="Ver PDF"><i data-lucide="file-down" class="w-4 h-4"></i></button>` : ''}</div>`, cls: 'text-right' }
   ], lista, { vacio: 'Todavía no hay solicitudes de constancias.' });
+  pintarConsultasExtraAdmin();
 }
 
 async function resolverConstancia(id, aprobar) {
@@ -6043,6 +6086,7 @@ function ajustesV4HTML(c, departamentos, campo, interruptor, dis) {
         <div class="sm:col-span-2">${campo('EMPRESA_DIRECCION', 'Dirección fiscal', 'text', 'maxlength="200"')}</div>
         ${campo('EMPRESA_CIUDAD', 'Ciudad de emisión', 'text', 'maxlength="60" placeholder="Barcelona, estado Anzoátegui"')}<div></div>
         ${campo('FIRMANTE_NOMBRE', 'Nombre de quien firma', 'text', 'maxlength="80"')}${campo('FIRMANTE_CARGO', 'Cargo de quien firma', 'text', 'maxlength="80"')}
+        ${c.FIRMANTE_CEDULA !== undefined ? campo('FIRMANTE_CEDULA', 'Cédula de quien firma', 'text', 'maxlength="14" placeholder="V-12345678"') : ''}
       </div>
     </div>`;
 }
@@ -6199,11 +6243,11 @@ function mostrarAvisoVersion() {
   const fecha = f.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Caracas' });
   const hora = f.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Caracas' });
   const novedades = [
-    ['sparkles', 'Nuevo nombre: <b>Sumanpek App</b>. Ahora es mucho más que asistencia.'],
-    ['layout-grid', 'Tu app ahora tiene tres pestañas: <b>Asistencia</b>, <b>Trabajo</b> y <b>Trámites</b>.'],
-    ['package', 'Sigue los <b>pedidos de clientes</b> entre departamentos, desde Ventas hasta la entrega.'],
-    ['file-badge', 'Pide tu <b>constancia de trabajo</b> desde el teléfono y recíbela en PDF.'],
-    ['smile', '<b>Encuestas de clima</b> de solo 3 preguntas, siempre anónimas.']
+    ['wrench', '¿Falta material? Avísalo desde <b>Trabajo → Me falta material</b> y sigue cómo avanza la compra.'],
+    ['search-check', 'Cada trabajo terminado pasa por una <b>revisión de calidad</b> antes de seguir: menos errores, menos material perdido.'],
+    ['trophy', 'El <b>empleado y el departamento del mes</b> ahora también reconocen el trabajo bien hecho en los pedidos.'],
+    ['timer', 'Puedes <b>consultar tus horas extra</b> desde Trámites.'],
+    ['calendar-check', 'Tu <b>saldo de vacaciones</b> ahora incluye las que ya tomaste antes de la app.']
   ];
   abrirModal({
     titulo: '🎉 ¡Sumanpek App se actualizó!',
@@ -6220,3 +6264,322 @@ function mostrarAvisoVersion() {
     pie: '<button data-acc="version-ok" class="btn-primario w-full sm:w-auto">¡Entendido!</button>'
   });
 }
+
+/* =========================================================================
+ *  23. VERSIÓN 4.2
+ *  Vacaciones previas · Consulta de horas extra · Revisión de RRHH en pedidos ·
+ *  Producción en el empleado del mes · Material faltante · Ajustes nuevos
+ * ========================================================================= */
+
+/** Días de vacaciones registrados como disfrutados antes de usar el sistema. */
+function totalVacPrevias(e) {
+  let v = {};
+  try { v = JSON.parse(e && e.VacacionesPrevias || '{}') || {}; } catch (err) { v = {}; }
+  return Object.keys(v).filter(k => /^\d+$/.test(k)).reduce((s, k) => s + num(v[k]), 0);
+}
+
+/**
+ * Puntaje del empleado del mes con los pesos de Ajustes. Si a la persona le falta algún dato
+ * (sin evaluación o sin etapas de producción), ese peso se reparte entre los demás.
+ */
+function puntajeMes(r, prod) {
+  const w = S.sesion.pesosMes || { puntualidad: 40, asistencia: 30, evaluacion: 30, produccion: 0 };
+  const partes = [[r.pctPuntualidad ?? 0, w.puntualidad], [r.pctAsistencia ?? 100, w.asistencia]];
+  if (r.evalProm !== null && r.evalProm !== undefined) partes.push([r.evalProm, w.evaluacion]);
+  if (prod !== null && prod !== undefined) partes.push([prod, w.produccion]);
+  const total = partes.reduce((s, [, p]) => s + p, 0) || 1;
+  return partes.reduce((s, [v, p]) => s + v * p, 0) / total;
+}
+
+/**
+ * Producción de una persona ({email}) o de un departamento ({dep}) en un período:
+ * etapas aprobadas, rechazos de RRHH y pérdidas de material. Puntaje 0–100 (null si no trabajó en pedidos).
+ */
+function produccionDe({ email = '', dep = '' }, desde, hasta) {
+  const enRango = f => { const d = String(f || '').slice(0, 10); return d >= desde && d <= hasta; };
+  const mio = x => email ? String(x.por || '').toLowerCase() === String(email).toLowerCase() : normalizar(x.dep) === normalizar(dep);
+  let aprobadas = 0, rechazos = 0, perdidas = 0;
+  (S.ped?.pedidos || []).forEach(p => {
+    (p.Etapas || []).forEach(et => { if (et.estado === 'Listo' && mio(et) && enRango(et.revisado || et.fin)) aprobadas++; });
+    (p.Errores || []).forEach(e => { if (mio(e) && enRango(e.fecha)) { rechazos++; if (e.perdida) perdidas++; } });
+  });
+  const total = aprobadas + rechazos;
+  return { aprobadas, rechazos, perdidas, puntaje: total ? Math.max(0, 100 * aprobadas / total - 10 * perdidas) : null };
+}
+
+/* ---------- Vacaciones disfrutadas antes del sistema ---------- */
+async function formVacPrevias(id) {
+  let d;
+  try { d = await api('expediente', { id }, { texto: 'Cargando…' }); } catch (e) { return toast(e.message, 'error'); }
+  const e = d.empleado, v = saldoVacaciones(e, d.permisos);
+  let previas = {};
+  try { previas = JSON.parse(e.VacacionesPrevias || '{}') || {}; } catch (err) { previas = {}; }
+  const ing = aFecha(e.FechaIngreso);
+  const filas = Array.from({ length: v ? v.anios : 0 }, (_, i) => {
+    const k = i + 1, max = Math.min(15 + i, 30), y = ing.getFullYear() + i;
+    return `<div class="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2">
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-slate-800">${y}–${y + 1} <span class="text-slate-400 font-normal">· año ${k}</span></p><p class="text-xs text-slate-500">Le corresponden ${max} días</p></div>
+      <input name="vp_${k}" type="number" min="0" max="${max}" inputmode="numeric" class="campo w-20 text-center" value="${num(previas[k]) || ''}" placeholder="0">
+      <button type="button" data-acc="vp-todo" data-k="${k}" data-max="${max}" class="btn-sec btn-sm">Todo</button></div>`;
+  }).join('');
+  abrirModal({
+    titulo: `Vacaciones antes del sistema · ${nombreCompleto(e)}`,
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<form id="f-vp" data-id="${esc(e.ID)}" class="space-y-3" onsubmit="return false">
+      <p class="text-sm text-slate-600">Indica cuántos días ya disfrutó en cada año de servicio, antes de usar la app. Se descuentan de su saldo, que también ve en su teléfono.</p>
+      ${filas || '<p class="text-sm text-slate-400">Todavía no cumple su primer año de servicio.</p>'}
+      <div><label class="etiqueta">Nota (opcional)</label><input name="nota" class="campo" maxlength="300" value="${esc(previas.nota || '')}" placeholder="Ej.: según el libro de vacaciones"></div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="guardar-vp" class="btn-primario"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Guardar y recalcular saldo</button>`
+  });
+}
+
+async function guardarVacPrevias() {
+  const f = $('#f-vp');
+  const periodos = {};
+  $$('input[name^="vp_"]', f).forEach(i => { if (num(i.value) > 0) periodos[i.name.slice(3)] = num(i.value); });
+  try {
+    const r = await api('guardarVacacionesPrevias', { empleadoId: f.dataset.id, periodos, nota: f.nota.value }, { texto: 'Recalculando saldo…' });
+    toast(`Saldo recalculado: ${r.saldo.pendientes} día(s) pendientes.`, 'ok');
+    const i = S.empleados.findIndex(x => x.ID === r.empleado.ID); if (i >= 0) S.empleados[i] = Object.assign(S.empleados[i], r.empleado);
+    cerrarModal(); verExpediente(f.dataset.id, 'permisos');
+  } catch (e) { toast(e.message, 'error', 7000); }
+}
+
+/* ---------- Consulta de horas extra ---------- */
+/** Tarjeta en Trámites: el colaborador pide conocer su saldo; RRHH decide si lo comparte. */
+function pintarMisHorasExtra() {
+  let el = $('#mc-horas-extra');
+  if (!el) { $('#mc-constancias').insertAdjacentHTML('afterend', '<div id="mc-horas-extra"></div>'); el = $('#mc-horas-extra'); }
+  const hx = S.misHx || [];
+  const pend = hx.find(x => x.Estado === 'Pendiente');
+  el.innerHTML = `<div class="tarjeta">
+    <div class="px-5 py-4 flex items-center justify-between gap-3 ${hx.length ? 'border-b border-slate-100' : ''}">
+      <div class="flex items-center gap-3 min-w-0"><span class="h-11 w-11 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center shrink-0"><i data-lucide="timer" class="w-5 h-5"></i></span>
+        <div class="min-w-0"><p class="font-semibold text-slate-800">Mis horas extra</p><p class="text-xs text-slate-500">Pide a RRHH conocer tu saldo acumulado.</p></div></div>
+      ${pend ? '<span class="insignia bg-amber-100 text-amber-700 shrink-0">En revisión</span>' : '<button data-acc="pedir-hx" class="btn-primario btn-sm shrink-0">Consultar</button>'}</div>
+    <div class="divide-y divide-slate-100">${hx.filter(x => x.Estado !== 'Pendiente').slice(0, 3).map(x => `<div class="px-5 py-3">
+      ${x.Estado === 'Respondida' ? `<p class="text-sm"><b class="text-marca-700 text-lg">${fmtHoras(x.Minutos)}</b> <span class="text-slate-500">en ${esc(x.Dias)} día(s)</span></p>
+        <p class="text-xs text-slate-500">Del ${esc(fmtFecha(x.Desde))} al ${esc(fmtFecha(x.Hasta))}${x.Comentario ? ' · ' + esc(x.Comentario) : ''}</p>`
+        : `<p class="text-sm text-slate-600">No compartida: ${esc(x.Comentario)}</p>`}
+      <p class="text-[11px] text-slate-400 mt-0.5">Respondida el ${esc(String(x.Resuelto).slice(0, 10))}</p></div>`).join('')}</div></div>`;
+  iconos();
+}
+
+async function pedirHorasExtra() {
+  const motivo = await dialogo({ titulo: 'Consultar mis horas extra', mensaje: 'RRHH revisará tu solicitud y te avisará por aquí. Puedes indicar el motivo (opcional).', boton: 'Enviar', conTexto: true, opcional: true, placeholder: 'Ej.: quiero saber cuántas tengo acumuladas' });
+  if (motivo === null || motivo === false) return;
+  try { await api('pedirConsultaExtra', { motivo: motivo || '' }, { texto: 'Enviando…' }); toast('Listo: RRHH te responderá pronto.', 'ok'); cargarTramites(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+/** Panel de RRHH: consultas de horas extra (debajo de las constancias). */
+function pintarConsultasExtraAdmin() {
+  let cont = $('#hx-tabla');
+  if (!cont) {
+    $('#co-tabla').closest('.tarjeta').insertAdjacentHTML('afterend', `<div class="tarjeta mt-5"><div class="px-5 py-4 border-b border-slate-100"><h3 class="titulo-tarjeta">Consultas de horas extra</h3>
+      <p class="text-xs text-slate-400">El personal no ve su saldo directamente: lo pide y RRHH decide si lo comparte (junto con Administración).</p></div><div id="hx-tabla" class="overflow-x-auto scroll-fino"></div></div>`);
+    cont = $('#hx-tabla');
+  }
+  renderTabla('hx-tabla', 't-horas-extra', [
+    { t: 'Persona', v: c => `<b>${esc(nombreCompleto(empPorId(c.EmpleadoID)) || c.EmpleadoID)}</b><div class="text-xs text-slate-500">${esc(empPorId(c.EmpleadoID)?.Departamento || '')}</div>`, s: c => nombreCompleto(empPorId(c.EmpleadoID)), c: c => nombreCompleto(empPorId(c.EmpleadoID)) },
+    { t: 'Motivo', v: c => esc(c.Motivo || '—'), c: c => c.Motivo },
+    { t: 'Solicitada', v: c => esc(String(c.Solicitado).slice(0, 16)), s: c => c.Solicitado, c: c => c.Solicitado },
+    { t: 'Saldo', v: c => c.Estado === 'Pendiente' && c.calculo ? `<span class="text-slate-500">Calculado: <b>${fmtHoras(c.calculo.minutos)}</b> (${c.calculo.dias} días)</span>` : c.Minutos !== '' ? `<b>${fmtHoras(c.Minutos)}</b>` : '—', c: c => c.Minutos || (c.calculo ? c.calculo.minutos : '') },
+    { t: 'Estado', v: c => `<span class="insignia ${c.Estado === 'Pendiente' ? 'bg-amber-100 text-amber-700' : c.Estado === 'Respondida' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}">${esc(c.Estado)}</span>`, s: c => c.Estado, c: c => c.Estado },
+    { t: '', v: c => c.Estado === 'Pendiente' ? `<div class="flex justify-end gap-1 whitespace-nowrap no-print"><button data-acc="hx-compartir" data-id="${esc(c.ID)}" class="solo-rrhh btn-primario btn-sm">Compartir saldo</button>
+      <button data-acc="hx-no" data-id="${esc(c.ID)}" class="solo-rrhh btn-sec btn-sm">No compartir</button></div>` : '', cls: 'text-right' }
+  ], S.hx || [], { vacio: 'Nadie ha pedido conocer sus horas extra.' });
+}
+
+async function resolverHorasExtra(id, compartir) {
+  let comentario = '';
+  if (!compartir) { comentario = await dialogo({ titulo: 'No compartir el saldo', mensaje: 'La persona verá este motivo.', boton: 'Enviar', peligro: true, conTexto: true, placeholder: 'Ej.: lo conversamos en persona con Administración' }); if (!comentario) return; }
+  else if (!await confirmar('La persona verá en su teléfono el total de horas extra desde la fecha de inicio del sistema.', { titulo: '¿Compartir el saldo?', boton: 'Compartir', peligro: false })) return;
+  try { await api('resolverConsultaExtra', { id, compartir, comentario }, { texto: 'Guardando…' }); toast(compartir ? 'Saldo compartido.' : 'Respuesta enviada.', 'ok'); cargarConstanciasAdmin(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+/* ---------- Revisión de RRHH en los pedidos ---------- */
+async function revisarPedido(id, aprobar) {
+  if (aprobar) {
+    try { const r = await api('revisarPedido', { id, aprobar: true }, { texto: 'Aprobando…' }); toast(r.Estado === 'Listo para entregar' ? 'Aprobado: Ventas ya puede avisar al cliente.' : `Aprobado: pasó a ${etapaActual(r)?.dep}.`, 'ok'); cerrarModal(); cargarPedidos(); }
+    catch (e) { toast(e.message, 'error'); }
+    return;
+  }
+  const x = S.ped?.pedidos.find(p => p.ID === id);
+  abrirModal({
+    titulo: `Rechazar trabajo · ${x ? x.Numero + ' · ' + etapaActual(x)?.dep : ''}`,
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<form id="f-rev" data-id="${esc(id)}" class="space-y-4" onsubmit="return false">
+      <p class="text-sm text-slate-600">El trabajo vuelve a <b>${esc(x ? etapaActual(x)?.dep : '')}</b> con tu motivo y cuenta como un error de ese departamento en su producción.</p>
+      <div><label class="etiqueta">¿Qué hay que corregir? *</label><textarea name="motivo" rows="3" maxlength="300" class="campo" required placeholder="Ej.: los colores no coinciden con el arte aprobado"></textarea></div>
+      <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3 cursor-pointer"><input type="checkbox" name="perdida" class="mt-0.5 h-5 w-5 accent-[#C10866]">
+        <span><span class="block text-sm font-semibold text-slate-800">Hubo pérdida de material</span><span class="block text-xs text-slate-500">Resta más en la producción del departamento.</span></span></label>
+      <div id="rev-det" class="hidden"><label class="etiqueta">¿Qué material se perdió? *</label><input name="detalle" class="campo" maxlength="300" placeholder="Ej.: 2 m de lona y tinta"></div>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="enviar-rechazo" class="btn btn-sm bg-rose-600 text-white hover:bg-rose-700"><i data-lucide="undo-2" class="w-4 h-4"></i>Rechazar y devolver</button>`
+  });
+  const f = $('#f-rev');
+  f.perdida.addEventListener('change', () => $('#rev-det').classList.toggle('hidden', !f.perdida.checked));
+}
+
+async function enviarRechazo() {
+  const f = $('#f-rev');
+  if (!f.reportValidity()) return;
+  if (f.perdida.checked && !f.detalle.value.trim()) return toast('Describe qué material se perdió.', 'aviso');
+  try {
+    await api('revisarPedido', { id: f.dataset.id, aprobar: false, motivo: f.motivo.value, perdida: f.perdida.checked, detalle: f.detalle.value }, { texto: 'Devolviendo…' });
+    toast('Trabajo rechazado: el departamento ya recibió el aviso.', 'ok'); cerrarModal(); cargarPedidos();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+/* ---------- "Me falta material" ---------- */
+const ESTILO_MATERIAL = { Pendiente: 'bg-amber-100 text-amber-700', 'En compra': 'bg-sky-100 text-sky-700', Resuelto: 'bg-emerald-100 text-emerald-700', Anulada: 'bg-slate-200 text-slate-600' };
+
+async function cargarMaterial() {
+  try {
+    S.mat = await api('alertasMaterial', {}, { silencioso: true });
+    if (!$('#v-marcaje').classList.contains('hidden')) pintarMaterialEmp();
+    if (S.seccion === 'materiales' && !$('#v-admin').classList.contains('hidden')) pintarMaterialAdmin();
+  } catch (e) { /* se reintenta al volver a la pestaña */ }
+}
+
+/** Fila de una alerta con sus acciones (compras: En compra / Resuelto; el departamento: anular). */
+function filaMaterial(a) {
+  const gestiona = S.mat?.gestiona, abierta = ['Pendiente', 'En compra'].includes(a.Estado);
+  const propia = normalizar(a.Departamento) === normalizar(S.sesion.departamento);
+  const b = (estado, txt, cls = 'btn-sec') => `<button data-acc="mover-material" data-id="${esc(a.ID)}" data-estado="${estado}" class="${cls} btn-sm">${txt}</button>`;
+  return `<div class="px-4 py-3">
+    <div class="flex items-start justify-between gap-2"><div class="min-w-0"><p class="text-xs font-bold text-marca-700">${esc(a.Numero)} · ${esc(a.Departamento)}${a.Urgencia === 'Urgente' ? ' · <span class="text-rose-600">🚨 Urgente</span>' : ''}</p>
+      <p class="text-sm font-semibold text-slate-800">${esc(a.Material)}</p><p class="text-xs text-slate-500">${a.Cantidad ? esc(a.Cantidad) + ' · ' : ''}${esc(String(a.Creado).slice(0, 16))}${a.Nota ? ' · ' + esc(a.Nota) : ''}</p></div>
+      <span class="insignia shrink-0 ${ESTILO_MATERIAL[a.Estado] || ''}">${esc(a.Estado)}</span></div>
+    ${abierta ? `<div class="mt-2 flex flex-wrap gap-2 empty:hidden">${gestiona && a.Estado === 'Pendiente' ? b('En compra', '🛒 En compra') : ''}${gestiona ? b('Resuelto', '✅ Resuelto', 'btn-primario') : ''}${(propia || gestiona) && a.Estado === 'Pendiente' ? b('Anulada', 'Ya no hace falta', 'btn-fantasma') : ''}</div>` : ''}</div>`;
+}
+
+/** Tarjeta en la pestaña Trabajo. */
+function pintarMaterialEmp() {
+  let el = $('#mc-material');
+  if (!el) { $('#mc-pedidos').insertAdjacentHTML('afterend', '<div id="mc-material"></div>'); el = $('#mc-material'); }
+  if (!S.sesion.empleadoId) { el.innerHTML = ''; return; }
+  const l = (S.mat?.alertas || []).filter(a => S.mat.gestiona || ['Pendiente', 'En compra'].includes(a.Estado) || String(a.Actualizado).slice(0, 10) >= sumarDias(hoyStr(), -7));
+  el.innerHTML = `<div class="tarjeta">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+      <div class="min-w-0"><h3 class="titulo-tarjeta">🧰 Material</h3><p class="text-xs text-slate-400">${S.mat?.gestiona ? 'Alertas de los departamentos para compras' : 'Avisa a compras lo que le falta a tu departamento'}</p></div>
+      <button data-acc="nuevo-material" class="btn-primario btn-sm shrink-0"><i data-lucide="plus" class="w-4 h-4"></i>Me falta material</button></div>
+    <div class="divide-y divide-slate-100">${l.length ? l.slice(0, 15).map(filaMaterial).join('') : '<p class="px-5 py-4 text-sm text-slate-400">Sin alertas de material.</p>'}</div></div>`;
+  iconos();
+}
+
+function formMaterial() {
+  const activos = (S.ped?.pedidos || []).filter(p => p.Estado === 'En producción' && p.Etapas.some(et => normalizar(et.dep) === normalizar(S.sesion.departamento)));
+  abrirModal({
+    titulo: 'Me falta material',
+    ancho: 'sm:max-w-lg',
+    cuerpo: `<form id="f-mat" class="space-y-4" onsubmit="return false">
+      <div><label class="etiqueta">¿Qué material falta? *</label><textarea name="material" rows="3" maxlength="500" class="campo" required placeholder="Ej.: tinta magenta para el plotter, lona blanca de 13 oz"></textarea></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="etiqueta">Cantidad aproximada</label><input name="cantidad" class="campo" maxlength="60" placeholder="Ej.: 2 litros"></div>
+        <div><label class="etiqueta">Urgencia</label><select name="urgencia" class="campo"><option>Normal</option><option value="Urgente">🚨 Urgente</option></select></div>
+      </div>
+      ${activos.length ? `<div><label class="etiqueta">¿Para qué pedido? (opcional)</label><select name="pedidoId" class="campo">${opciones([{ v: '', t: 'Ninguno en particular' }].concat(activos.map(p => ({ v: p.ID, t: p.Numero + ' · ' + p.Cliente }))), '')}</select></div>` : ''}
+      <p class="text-xs text-slate-500">Le llega un aviso a compras y a RRHH. Si es urgente, también un correo. Te avisaremos cuando esté en compra o resuelto.</p>
+    </form>`,
+    pie: `<button data-acc="cancelar-modal" class="btn-sec">Cancelar</button><button data-acc="enviar-material" class="btn-primario"><i data-lucide="send" class="w-4 h-4"></i>Enviar alerta</button>`
+  });
+}
+
+async function enviarMaterial() {
+  const f = $('#f-mat');
+  if (!f.reportValidity()) return;
+  try {
+    const r = await api('alertarMaterial', datosFormulario(f), { texto: 'Enviando alerta…' });
+    toast(`Alerta ${r.Numero} enviada a compras.`, 'ok'); cerrarModal(); cargarMaterial();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function moverMaterial(id, estado) {
+  let nota = '';
+  if (estado === 'En compra' || estado === 'Resuelto') {
+    nota = await dialogo({ titulo: estado === 'En compra' ? 'Material en compra' : 'Material resuelto', mensaje: 'Puedes dejar una nota para el departamento (opcional).', boton: 'Guardar', conTexto: true, opcional: true, placeholder: estado === 'En compra' ? 'Ej.: llega el jueves' : 'Ej.: entregado en el almacén' });
+    if (nota === null || nota === false) return;
+  } else if (!await confirmar('La alerta se cerrará como anulada.', { titulo: '¿Ya no hace falta?', boton: 'Anular' })) return;
+  try { await api('moverAlertaMaterial', { id, estado, nota: nota || '' }, { texto: 'Guardando…' }); toast('Alerta actualizada.', 'ok'); cargarMaterial(); }
+  catch (e) { toast(e.message, 'error'); }
+}
+
+/** Panel: sección Material faltante. */
+async function cargarMaterialAdmin() {
+  if (!S.mat) $('#ma-lista').innerHTML = '<p class="p-5 text-sm text-slate-400 pulso">Cargando alertas…</p>';
+  await cargarMaterial();
+}
+
+function pintarMaterialAdmin() {
+  if (!S.mat || !$('#ma-lista')) return;
+  const l = S.mat.alertas;
+  $('#ma-resumen').innerHTML = [
+    tarjetaKPI('wrench', 'Pendientes', l.filter(a => a.Estado === 'Pendiente').length, 'Esperan respuesta de compras', 'ambar'),
+    tarjetaKPI('siren', 'Urgentes abiertas', l.filter(a => a.Urgencia === 'Urgente' && ['Pendiente', 'En compra'].includes(a.Estado)).length, 'Pueden detener la producción', 'rosa'),
+    tarjetaKPI('shopping-cart', 'En compra', l.filter(a => a.Estado === 'En compra').length, 'Ya se están comprando', 'azul'),
+    tarjetaKPI('check-check', 'Resueltas (60 días)', l.filter(a => a.Estado === 'Resuelto').length, 'Material entregado', 'verde')
+  ].join('');
+  renderTabla('ma-lista', 't-material', [
+    { t: 'N.º', v: a => `<b class="text-marca-700">${esc(a.Numero)}</b>`, s: a => a.Numero, c: a => a.Numero },
+    { t: 'Departamento', v: a => esc(a.Departamento), s: a => a.Departamento, c: a => a.Departamento },
+    { t: 'Material', v: a => `<span class="envolver">${esc(a.Material)}</span>`, c: a => a.Material },
+    { t: 'Cantidad', v: a => esc(a.Cantidad || '—'), c: a => a.Cantidad },
+    { t: 'Urgencia', v: a => a.Urgencia === 'Urgente' ? '<span class="insignia bg-rose-100 text-rose-700">🚨 Urgente</span>' : 'Normal', s: a => a.Urgencia, c: a => a.Urgencia },
+    { t: 'Enviada', v: a => esc(String(a.Creado).slice(0, 16)), s: a => a.Creado, c: a => a.Creado },
+    { t: 'Estado', v: a => `<span class="insignia ${ESTILO_MATERIAL[a.Estado] || ''}">${esc(a.Estado)}</span>${a.Nota ? `<div class="text-xs text-slate-500 mt-1">${esc(a.Nota)}</div>` : ''}`, s: a => a.Estado, c: a => a.Estado },
+    { t: '', v: a => ['Pendiente', 'En compra'].includes(a.Estado) && S.mat.gestiona ? `<div class="flex justify-end gap-1 whitespace-nowrap no-print">${a.Estado === 'Pendiente' ? `<button data-acc="mover-material" data-id="${esc(a.ID)}" data-estado="En compra" class="btn-sec btn-sm">En compra</button>` : ''}
+      <button data-acc="mover-material" data-id="${esc(a.ID)}" data-estado="Resuelto" class="btn-primario btn-sm">Resuelto</button></div>` : '', cls: 'text-right' }
+  ], l, { vacio: 'Ningún departamento ha reportado material faltante.' });
+  S.sesion.materialPendiente = l.filter(a => a.Estado === 'Pendiente').length;
+  actualizarInsignia(S.sesion.materialPendiente, 'materiales');
+}
+
+/* ---------- Ajustes de la versión 4.2 ---------- */
+function ajustesV42HTML(c, departamentos, campo, interruptor, dis) {
+  if (c.INICIO_SISTEMA === undefined) return `<div class="tarjeta p-5 border-amber-300 bg-amber-50"><p class="text-sm text-amber-800"><b>Falta un paso:</b> ejecuta <b>Instalar / reparar</b> en la hoja de cálculo para activar los ajustes de la versión 4.2.</p></div>`;
+  const elegidos = String(c.MATERIAL_DEPARTAMENTOS || '').split(/[,;]/).map(x => normalizar(x.trim())).filter(Boolean);
+  const chips = departamentos.filter(d => d.Activo).map(d => `<label class="cursor-pointer"><input type="checkbox" name="matDep" value="${esc(d.Nombre)}" class="peer sr-only" ${elegidos.includes(normalizar(d.Nombre)) ? 'checked' : ''} ${dis}>
+    <span class="block rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 peer-checked:bg-navy-900 peer-checked:text-white peer-checked:border-navy-900">${esc(d.Nombre)}</span></label>`).join('');
+  return `<div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Inicio del sistema y versiones</h3>
+      <p class="text-xs text-slate-400 mb-4">Antes de la fecha de inicio no se cuentan ausencias ni estadísticas.</p>
+      <div class="grid sm:grid-cols-2 gap-4 items-end">${campo('INICIO_SISTEMA', 'Fecha de inicio del sistema', 'date')}
+        <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">Página <b>${esc(VERSION)}</b> · Servidor <b>${esc(S.sesion.version || '')}</b></div></div>
+    </div>
+    <div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Revisión de calidad de los pedidos</h3>
+      <p class="text-xs text-slate-400 mb-4">RRHH aprueba el trabajo de cada departamento antes de que pase al siguiente o a Ventas. Los rechazos restan en la producción.</p>
+      <div class="grid sm:grid-cols-2 gap-4 items-end">${interruptor('PEDIDOS_REVISION_RRHH', 'RRHH revisa cada etapa', 'Si lo apagas, el pedido pasa directo al siguiente departamento.')}
+        ${campo('PEDIDOS_HORAS_REVISION', 'Alerta si una revisión espera más de (horas)', 'number', 'min="1" max="72"')}</div>
+    </div>
+    <div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Material faltante</h3>
+      <p class="text-xs text-slate-400 mb-4">Departamentos que reciben las alertas de "Me falta material" (compras).</p>
+      <div class="flex flex-wrap gap-2">${chips}</div>
+    </div>
+    <div class="tarjeta p-5">
+      <h3 class="titulo-tarjeta">Empleado y departamento del mes</h3>
+      <p class="text-xs text-slate-400 mb-4">Peso de cada indicador en el puntaje. Deben sumar 100%. Si a alguien le falta un dato (sin evaluación o sin pedidos), su peso se reparte entre los demás.</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">${campo('PESO_PUNTUALIDAD', 'Puntualidad %', 'number', 'min="0" max="100"')}${campo('PESO_ASISTENCIA', 'Asistencia %', 'number', 'min="0" max="100"')}
+        ${campo('PESO_EVALUACION', 'Evaluación %', 'number', 'min="0" max="100"')}${campo('PESO_PRODUCCION', 'Producción %', 'number', 'min="0" max="100"')}</div>
+    </div>`;
+}
+
+/* ---------- Acciones de botones (v4.2) ---------- */
+Object.assign(ACC, {
+  'vac-previas': d => formVacPrevias(d.id),
+  'vp-todo': d => { const i = $(`[name="vp_${d.k}"]`); if (i) i.value = d.max; },
+  'guardar-vp': () => guardarVacPrevias(),
+  'pedir-hx': () => pedirHorasExtra(),
+  'hx-compartir': d => resolverHorasExtra(d.id, true),
+  'hx-no': d => resolverHorasExtra(d.id, false),
+  'revisar-pedido': d => revisarPedido(d.id, d.ok === '1'),
+  'enviar-rechazo': () => enviarRechazo(),
+  'nuevo-material': () => formMaterial(),
+  'enviar-material': () => enviarMaterial(),
+  'mover-material': d => moverMaterial(d.id, d.estado)
+});
