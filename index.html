@@ -56,6 +56,7 @@
       .tabla tbody tr:hover { @apply bg-slate-50/70; }
       .nav-item { @apply relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-navy-100 hover:bg-white/10 hover:text-white transition w-full text-left; }
       .nav-item.activo { @apply bg-white/15 text-white; }
+      .nav-grupo { @apply flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-navy-300 hover:text-white hover:bg-white/5; }
       .nav-item.activo::before { content: ''; @apply absolute left-0 top-2 bottom-2 w-1 rounded-r bg-oro-400; }
       .nav-movil { @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 whitespace-nowrap; }
       .nav-movil.activo { @apply bg-navy-900 text-white border-navy-900; }
@@ -177,6 +178,15 @@
     html.dark .titulo-tarjeta { color: #f1f5f9 !important; }
     html.dark .etiqueta { color: #b4c0d3 !important; }
     html.dark .tabla tbody td { color: #e2e8f0; }
+    /* v4.2.1: tablas largas con encabezado y primera columna siempre visibles */
+    .tabla-fija { max-height: 72vh; overflow: auto; overscroll-behavior: contain; }
+    .tabla-fija .tabla thead th { position: sticky; top: 0; z-index: 2; }
+    .tabla-fija .tabla tbody td:first-child, .tabla-fija .tabla thead th:first-child { position: sticky; left: 0; z-index: 1; background-color: #fff; box-shadow: 1px 0 0 #e2e8f0; }
+    .tabla-fija .tabla thead th:first-child { z-index: 3; background-color: #f8fafc; }
+    .tabla-fija .tabla tbody tr:hover td:first-child { background-color: #f8fafc; }
+    html.dark .tabla-fija .tabla tbody td:first-child { background-color: #131c31; box-shadow: 1px 0 0 #26324f; }
+    html.dark .tabla-fija .tabla thead th:first-child { background-color: #1a2540; }
+    html.dark .tabla-fija .tabla tbody tr:hover td:first-child { background-color: #1e2a47; }
     /* Sobre amarillo (botones, insignias, franja de versión) el texto sigue siendo azul marino */
     html.dark .bg-oro-400, html.dark .bg-oro-400 *, html.dark .bg-oro-300 { color: #020b3f !important; }
     html.dark #rep-hoja, html.dark #rep-hoja * { color-scheme: light; }
@@ -270,7 +280,7 @@
         </div>
         <div id="login-acceso" class="hidden text-left"></div>
       </div>
-      <a href="trabaja.html" class="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-oro-400 px-4 py-3 text-sm font-bold text-navy-950 shadow-lg hover:bg-oro-300">💼 ¿Buscas empleo? Trabaja con nosotros</a>
+      <a href="postulaciones.html" class="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-oro-400 px-4 py-3 text-sm font-bold text-navy-950 shadow-lg hover:bg-oro-300">💼 ¿Buscas empleo? Trabaja con nosotros</a>
       <p class="text-center text-xs text-white/60 mt-6">Sumanpek App v<span id="version">3.2.0</span> · © <span id="anio"></span> Anabel Martínez RRHH · <a href="privacidad.html" class="underline hover:text-white">Privacidad</a></p>
     </div>
   </section>
@@ -399,7 +409,7 @@
 
       </div>
       <p class="text-center text-xs text-slate-400">La hora oficial es la del servidor, no la de tu teléfono.<br>
-        Sumanpek App v<span class="ver-app">4.2.0</span> · © Anabel Martínez RRHH</p>
+        Sumanpek App v<span class="ver-app">4.2.1</span> · © Anabel Martínez RRHH</p>
     </main>
     <!-- v4: barra inferior de pestañas del autoservicio -->
     <nav id="mc-tabs" class="no-print fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
@@ -438,7 +448,7 @@
           <button data-acc="compartir-app" class="btn btn-sm flex-1 bg-white/10 text-white hover:bg-white/20"><i data-lucide="qr-code" class="w-4 h-4"></i>Compartir app</button>
           <button data-acc="instalar-app" class="instalar-app hidden btn btn-sm flex-1 bg-oro-400 text-navy-950 hover:bg-oro-300"><i data-lucide="download" class="w-4 h-4"></i>Instalar</button>
         </div>
-        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Sumanpek App v<span class="ver-app">4.2.0</span><br>© Anabel Martínez RRHH</p>
+        <p class="mt-3 text-[10px] leading-tight text-navy-200/70">Sumanpek App v<span class="ver-app">4.2.1</span><br>© Anabel Martínez RRHH</p>
       </div>
     </aside>
 
@@ -477,17 +487,18 @@
             <button data-acc="imprimir" class="btn-sec"><i data-lucide="printer" class="w-4 h-4"></i>Imprimir</button>
           </div>
         </div>
+        <div id="dash-pendientes" class="no-print mb-5"></div>
         <div id="dash-filtros" class="no-print mb-5"></div>
         <div id="dash-kpis" class="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5"></div>
         <div id="dash-mes" class="tarjeta mb-5">
           <div class="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <div><h3 class="titulo-tarjeta">🏆 Empleado del mes</h3>
-              <p class="text-xs text-slate-400">Ranking: 40% puntualidad + 30% asistencia + 30% evaluación de desempeño del mes</p></div>
+              <p id="dash-mes-formula" class="text-xs text-slate-400">Ranking del mes según los pesos de Ajustes</p></div>
             <div id="dash-mes-sel" class="w-56 no-print"></div>
           </div>
           <div id="dash-mes-cuerpo" class="p-5 grid lg:grid-cols-5 gap-5"></div>
           <div class="px-5 pt-1 pb-2 border-t border-slate-100"><h3 class="titulo-tarjeta mt-4">🏅 Departamento del mes</h3>
-            <p class="text-xs text-slate-400">Promedio del puntaje de su equipo en el mismo mes (con la misma fórmula)</p></div>
+            <p class="text-xs text-slate-400">Promedio del puntaje de las personas evaluadas de cada equipo (misma fórmula)</p></div>
           <div id="dash-dmes-cuerpo" class="p-5 pt-3 grid lg:grid-cols-5 gap-5"></div>
         </div>
         <div class="grid xl:grid-cols-3 gap-5 mb-5">
@@ -532,14 +543,14 @@
             <h3 class="titulo-tarjeta">Rendimiento colectivo por departamento</h3>
             <button data-acc="exportar" data-tabla="t-dash-deptos" data-nombre="kpi_departamentos" class="btn-fantasma btn-sm no-print"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exportar como CSV</button>
           </div>
-          <div id="dash-tabla-deptos" class="overflow-x-auto scroll-fino"></div>
+          <div id="dash-tabla-deptos" class="tabla-fija scroll-fino"></div>
         </div>
         <div class="tarjeta">
           <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
             <h3 class="titulo-tarjeta">Indicadores por empleado</h3>
             <button data-acc="exportar" data-tabla="t-dash-emp" data-nombre="kpi_empleados" class="btn-fantasma btn-sm no-print"><i data-lucide="download" class="w-3.5 h-3.5"></i>Exportar como CSV</button>
           </div>
-          <div id="dash-tabla-emp" class="overflow-x-auto scroll-fino"></div>
+          <div id="dash-tabla-emp" class="tabla-fija scroll-fino"></div>
         </div>
       </section>
 
@@ -857,7 +868,7 @@
           <div class="tarjeta p-5"><h3 class="titulo-tarjeta mb-3">Personal activo, ingresos y egresos</h3><div class="h-64"><canvas id="ih-g-personal"></canvas></div></div>
         </div>
         <div class="tarjeta"><div class="px-5 py-4 border-b border-slate-100"><h3 class="titulo-tarjeta">Mes a mes</h3><p class="text-xs text-slate-400">Δ = cambio frente al mes anterior y frente al mismo mes del año pasado.</p></div>
-          <div id="ih-tabla" class="overflow-x-auto scroll-fino"></div></div>
+          <div id="ih-tabla" class="tabla-fija scroll-fino"></div></div>
       </section>
 
       <section id="s-ajustes" class="seccion hidden">
@@ -872,6 +883,6 @@
     </main>
   </section>
 
-  <script src="app.js?v=4.2.0"></script>
+  <script src="app.js?v=4.2.1"></script>
 </body>
 </html>

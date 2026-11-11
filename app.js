@@ -15,9 +15,9 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '110601279842-om0i0kqev5ut2q8quu71v8j82cf1b3hs.apps.googleusercontent.com'
 };
 
-const VERSION = '4.2.0';
+const VERSION = '4.2.1';
 /** Fecha y hora en que se terminó de desarrollar esta versión (se muestra en el aviso de actualización). */
-const VERSION_FECHA = '2026-11-11T19:00:00-04:00';
+const VERSION_FECHA = '2026-11-11T21:30:00-04:00';
 const APP_NOMBRE = 'Sumanpek App';
 const APP_AUTOR = 'Anabel Martínez RRHH';
 const APP_URL = 'https://sumanpek.github.io/';
@@ -301,7 +301,7 @@ function cancelarModal() {
   if (volver) { S.modalVolver = null; volver(); } else cerrarModal();
 }
 
-function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', peligro = false, conTexto = false, placeholder = '', valor = '', linea = false, opcional = false } = {}) {
+function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', cancelar = 'Cancelar', peligro = false, conTexto = false, placeholder = '', valor = '', linea = false, opcional = false } = {}) {
   return new Promise(resolve => {
     const capa = document.createElement('div');
     capa.className = 'confirmacion fixed inset-0 z-[95] flex items-center justify-center p-4 bg-slate-900/50';
@@ -310,7 +310,7 @@ function dialogo({ titulo = 'Confirmar', mensaje = '', boton = 'Aceptar', peligr
         <p class="text-sm text-slate-600 ${conTexto ? 'mb-3' : 'mb-6'}">${esc(mensaje)}</p>
         ${conTexto ? (linea ? `<input class="campo mb-5" maxlength="60" placeholder="${esc(placeholder)}" value="${esc(valor)}">` : `<textarea rows="3" class="campo mb-5" placeholder="${esc(placeholder)}">${esc(valor)}</textarea>`) : ''}
         <div class="flex justify-end gap-2">
-          <button class="btn-sec" data-r="0">Cancelar</button>
+          <button class="btn-sec" data-r="0">${esc(cancelar)}</button>
           <button class="${peligro ? 'btn-peligro' : 'btn-primario'}" data-r="1">${esc(boton)}</button>
         </div></div>`;
     capa.addEventListener('click', ev => {
@@ -374,7 +374,7 @@ function barra(delta) {
 }
 
 /** Acciones de solo lectura: se permiten aunque las versiones no coincidan. */
-const LECTURAS = new Set(['sesion', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
+const LECTURAS = new Set(['sesion', 'pendientes', 'miHistorial', 'misSolicitudes', 'listarEmpleados', 'expediente', 'datosPeriodo',
   'descargarDocumento', 'descargarSoporte', 'estadoAcceso', 'misPermisos', 'ajustes',
   'planificacion', 'miAgenda', 'curriculums', 'descargarCurriculum', 'ayuda', 'descargarManual', 'auditoria', 'misNotificaciones', 'pushConfig',
   'alertasMaterial', 'misConsultasExtra', 'consultasExtra', 'pedidos', 'encuestas', 'resultadosEncuesta', 'misEncuestas', 'misConstancias', 'constancias', 'descargarConstancia', 'descargarCedulaCV']);
@@ -566,7 +566,7 @@ async function alVolverALaApp() {
     actualizarCampana(s.notifNoLeidas || 0);
     celebrarAlAbrir();
     if (!$('#v-marcaje').classList.contains('hidden')) mostrarMarcaje();
-    else if (!$('#v-admin').classList.contains('hidden')) { invalidarCache(); refrescarFondo(); }
+    else if (!$('#v-admin').classList.contains('hidden')) { S.pendientesT = Date.now(); aplicarPendientes(); invalidarCache(); refrescarFondo(); }
   } catch (e) { /* se reintenta la próxima vez */ }
 }
 
@@ -578,6 +578,7 @@ function reautenticar() {
 }
 
 function cerrarSesion(msg = '') {
+  clearInterval(S.pendTimer); S.pendTimer = null;
   S.token = null; S.sesion = null; S.store = null; S.versionDesigual = null;
   $('#franja-version').classList.add('hidden'); document.body.style.paddingTop = '';
   document.documentElement.style.setProperty('--franja', '0px'); S.catalogoListo = false; S.empleados = []; S.permisos = []; S.evaluaciones = [];
@@ -1096,14 +1097,8 @@ function mostrarAdmin() {
   $('#emp-estado').innerHTML = opciones(s.catalogos.estados, '', 'Todos los estados');
   $('#per-tipo').innerHTML = opciones(s.catalogos.tiposPermiso, '', 'Todos los tipos');
   $('#per-estado').innerHTML = opciones(s.catalogos.estadosPermiso, '', 'Todos los estados');
-  actualizarInsignia(s.solicitudesPendientes || 0);
-  actualizarInsignia(s.accesosPendientes || 0, 'empleados');
-  actualizarInsignia(s.permisosPendientes || 0, 'permisos');
-  actualizarInsignia(s.tareasPorAprobar || 0, 'tareas');
-  actualizarInsignia((s.pedidosPorAutorizar || 0) + (s.pedidosPorRevisar || 0), 'pedidos');
-  actualizarInsignia((s.constanciasPendientes || 0) + (s.consultasExtraPendientes || 0), 'constancias');
-  actualizarInsignia(s.materialPendiente || 0, 'materiales');
-  actualizarInsignia(s.postulacionesNuevas || 0, 'curriculums');
+  aplicarPendientes();
+  iniciarSondeoPendientes();
   navegar(S.seccion === 'mi-marcaje' ? 'dashboard' : S.seccion);
 }
 
@@ -1116,15 +1111,143 @@ function pintarSelectoresDepto() {
   });
 }
 
+/* ---------- Menú lateral agrupado (v4.2.1) ---------- */
+/** Categorías del menú lateral. Dashboard queda suelto arriba; el resto se pliega por grupo. */
+const GRUPOS_MENU = [
+  { id: 'personal', titulo: 'Personal', secciones: ['empleados', 'asistencia', 'permisos', 'evaluaciones', 'curriculums', 'constancias'] },
+  { id: 'operacion', titulo: 'Operación', secciones: ['tareas', 'agenda', 'pedidos', 'materiales'] },
+  { id: 'gestion', titulo: 'Gestión', secciones: ['clima', 'indicadores', 'registro'] },
+  { id: 'sistema', titulo: 'Sistema', secciones: ['ajustes', 'ayuda', 'mi-marcaje'] }
+];
+
+/** Grupos que la persona dejó abiertos (se recuerdan en este navegador). */
+function gruposAbiertos() {
+  try { const g = JSON.parse(localStorage.getItem('aa_menu_abiertos') || 'null'); return Array.isArray(g) ? g : ['personal']; } catch (e) { return ['personal']; }
+}
+function guardarGruposAbiertos(lista) {
+  try { localStorage.setItem('aa_menu_abiertos', JSON.stringify(lista)); } catch (e) { /* navegador sin almacenamiento */ }
+}
+
+/** Botón de una sección del menú (con su insignia de pendientes si la tiene). */
+function botonMenuHTML(s, movil = false) {
+  const ins = CON_INSIGNIA.includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ${movil ? '' : 'ml-auto '}insignia bg-oro-400 text-navy-950">0</span>` : '';
+  return movil
+    ? `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${ins}</button>`
+    : `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${ins}</button>`;
+}
+
 function construirNavegacion() {
-  $('#nav-lateral').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-item"><i data-lucide="${s.icono}" class="w-5 h-5"></i>${s.titulo}${CON_INSIGNIA.includes(s.id) ? `<span data-insignia="${s.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
-  $('#nav-movil-items').innerHTML = SECCIONES.map(s =>
-    `<button data-acc="nav" data-sec="${s.id}" class="nav-movil"><i data-lucide="${s.icono}" class="w-4 h-4"></i>${s.titulo}${CON_INSIGNIA.includes(s.id) ? `<span data-insignia="${s.id}" class="hidden insignia bg-oro-400 text-navy-950">0</span>` : ''}</button>`).join('');
+  const porId = id => SECCIONES.find(s => s.id === id);
+  const abiertos = gruposAbiertos();
+  $('#nav-lateral').innerHTML = botonMenuHTML(porId('dashboard')) + GRUPOS_MENU.map(g => {
+    const abierto = abiertos.includes(g.id);
+    return `<div class="pt-2" data-grupo="${g.id}">
+      <button data-acc="nav-grupo" data-grupo="${g.id}" aria-expanded="${abierto}" class="nav-grupo">
+        <span>${g.titulo}</span>
+        <span data-total-grupo="${g.id}" class="hidden ml-auto insignia bg-oro-400 text-navy-950">0</span>
+        <i data-lucide="chevron-down" class="w-4 h-4 transition-transform ${abierto ? 'rotate-180' : ''}"></i>
+      </button>
+      <div data-grupo-items="${g.id}" class="space-y-1 ${abierto ? '' : 'hidden'}">${g.secciones.map(id => botonMenuHTML(porId(id))).join('')}</div></div>`;
+  }).join('');
+  // En el teléfono el menú es una fila deslizable: se mantiene completo, en el mismo orden
+  const orden = ['dashboard'].concat(...GRUPOS_MENU.map(g => g.secciones));
+  $('#nav-movil-items').innerHTML = orden.map(id => botonMenuHTML(porId(id), true)).join('');
+}
+
+/** Abre o cierra una categoría del menú y lo recuerda. */
+function alternarGrupoMenu(id, forzarAbierto = null) {
+  const caja = $(`[data-grupo-items="${id}"]`), btn = $(`[data-acc="nav-grupo"][data-grupo="${id}"]`);
+  if (!caja || !btn) return;
+  const abrir = forzarAbierto === null ? caja.classList.contains('hidden') : forzarAbierto;
+  caja.classList.toggle('hidden', !abrir);
+  btn.setAttribute('aria-expanded', String(abrir));
+  btn.querySelector('svg, i')?.classList.toggle('rotate-180', abrir);
+  const lista = gruposAbiertos().filter(x => x !== id);
+  guardarGruposAbiertos(abrir ? lista.concat(id) : lista);
+}
+
+/** Suma de pendientes de cada categoría, visible aunque la categoría esté cerrada. */
+function actualizarTotalesMenu() {
+  GRUPOS_MENU.forEach(g => {
+    const total = g.secciones.reduce((s, id) => s + (Number($(`#nav-lateral [data-insignia="${id}"]`)?.textContent) || 0), 0);
+    $$(`[data-total-grupo="${g.id}"]`).forEach(b => { b.textContent = total; b.classList.toggle('hidden', !total); });
+  });
 }
 
 function actualizarInsignia(n, sec = 'asistencia') {
-  $$(`[data-insignia="${sec}"]`).forEach(b => { b.textContent = n; b.classList.toggle('hidden', !n); });
+  $$(`[data-insignia="${sec}"]`).forEach(b => { b.textContent = n || 0; b.classList.toggle('hidden', !n); });
+  actualizarTotalesMenu();
+}
+
+/* ---------- Pendientes en tiempo real (v4.2.1) ---------- */
+/** Qué se muestra en la franja "Pendientes" del dashboard: clave de la sesión, texto y sección a la que lleva. */
+const PENDIENTES = [
+  { k: 'solicitudesPendientes', t: 'Marcajes por aprobar', sec: 'asistencia', icono: 'clock' },
+  { k: 'accesosPendientes', t: 'Accesos por aprobar', sec: 'empleados', icono: 'user-plus' },
+  { k: 'permisosPendientes', t: 'Permisos por aprobar', sec: 'permisos', icono: 'calendar-days' },
+  { k: 'tareasPorAprobar', t: 'Actividades propuestas', sec: 'tareas', icono: 'square-kanban' },
+  { k: 'pedidosPorAutorizar', t: 'Pedidos por autorizar', sec: 'pedidos', icono: 'package' },
+  { k: 'pedidosPorRevisar', t: 'Trabajos por revisar', sec: 'pedidos', icono: 'search-check' },
+  { k: 'constanciasPendientes', t: 'Constancias', sec: 'constancias', icono: 'file-badge' },
+  { k: 'consultasExtraPendientes', t: 'Consultas de horas extra', sec: 'constancias', icono: 'timer' },
+  { k: 'materialPendiente', t: 'Material faltante', sec: 'materiales', icono: 'wrench' },
+  { k: 'postulacionesNuevas', t: 'Postulaciones nuevas', sec: 'curriculums', icono: 'file-user' }
+];
+
+/** Pasa los contadores de la sesión a las insignias del menú y a la franja del dashboard. */
+function aplicarPendientes() {
+  const s = S.sesion || {};
+  actualizarInsignia(s.solicitudesPendientes || 0);
+  actualizarInsignia(s.accesosPendientes || 0, 'empleados');
+  actualizarInsignia(s.permisosPendientes || 0, 'permisos');
+  actualizarInsignia(s.tareasPorAprobar || 0, 'tareas');
+  actualizarInsignia((s.pedidosPorAutorizar || 0) + (s.pedidosPorRevisar || 0), 'pedidos');
+  actualizarInsignia((s.constanciasPendientes || 0) + (s.consultasExtraPendientes || 0), 'constancias');
+  actualizarInsignia(s.materialPendiente || 0, 'materiales');
+  actualizarInsignia(s.postulacionesNuevas || 0, 'curriculums');
+  pintarFranjaPendientes();
+}
+
+/** Franja de números del dashboard: solo cantidades; cada una lleva a su sección. */
+function pintarFranjaPendientes() {
+  const cont = $('#dash-pendientes');
+  if (!cont || !S.sesion) return;
+  const s = S.sesion;
+  const items = PENDIENTES.map(p => ({ ...p, n: Number(s[p.k]) || 0 }));
+  if (S.alertasN !== undefined) items.push({ k: 'alertas', t: 'Alertas del dashboard', sec: '', icono: 'triangle-alert', n: S.alertasN });
+  // Primero lo que tiene pendientes (en el teléfono se ve sin deslizar); las alertas siempre al final
+  items.sort((a, b) => (a.k === 'alertas') - (b.k === 'alertas') || (b.n > 0) - (a.n > 0));
+  const total = items.filter(x => x.k !== 'alertas').reduce((t, x) => t + x.n, 0); // las alertas son avisos, no trámites
+  const hora = S.pendientesT ? new Date(S.pendientesT).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' }) : '';
+  cont.innerHTML = `<div class="tarjeta p-3 sm:p-4">
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <p class="text-sm font-bold text-slate-800 whitespace-nowrap">Pendientes <span class="ml-1 insignia ${total ? 'bg-oro-400 text-navy-950' : 'bg-emerald-100 text-emerald-700'}">${total ? total : 'Todo al día'}</span></p>
+      <span class="text-[11px] text-slate-400 text-right">${hora ? `Actualizado ${hora}<span class="hidden sm:inline"> · se renueva solo</span>` : ''}</span></div>
+    <div class="flex gap-2 overflow-x-auto scroll-fino pb-1 sm:grid sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 sm:overflow-visible">
+      ${items.map(x => `<button data-acc="${x.sec ? 'nav' : 'ver-alertas'}" ${x.sec ? `data-sec="${x.sec}"` : ''} data-pendiente="${x.k}"
+        class="shrink-0 w-28 sm:w-auto rounded-xl border px-2.5 py-2 text-left transition ${x.n ? (x.k === 'pedidosPorRevisar' && s.revisionAtrasada ? 'border-rose-300 bg-rose-50' : 'border-oro-300 bg-oro-50') : 'border-slate-200 opacity-60'}">
+        <span class="block text-xl font-extrabold tabular-nums ${x.n ? 'text-navy-900' : 'text-slate-400'}">${x.n}</span>
+        <span class="block text-[11px] leading-tight text-slate-600">${esc(x.t)}</span></button>`).join('')}
+    </div></div>`;
+}
+
+/** Consulta solo los contadores al servidor (acción liviana) y actualiza menú y franja. */
+async function refrescarPendientes() {
+  if (!S.sesion || !['RRHH', 'DIRECCION'].includes(S.sesion.rol)) return;
+  if (document.visibilityState !== 'visible' || $('#v-admin').classList.contains('hidden')) return;
+  try {
+    const r = await api('pendientes', {}, { silencioso: true });
+    Object.assign(S.sesion, r);
+    S.pendientesT = Date.now();
+    aplicarPendientes();
+  } catch (e) { /* sin conexión: se reintenta en la próxima vuelta */ }
+}
+
+/** Cada 90 segundos (y al volver a la app) se renuevan los números. Se detiene al cerrar sesión. */
+function iniciarSondeoPendientes() {
+  S.pendientesT = Date.now();
+  clearInterval(S.pendTimer);
+  S.pendTimer = setInterval(refrescarPendientes, 90000);
 }
 
 function navegar(sec) {
@@ -1133,8 +1256,11 @@ function navegar(sec) {
   S.seccion = sec;
   fijarHash('#/gestion/' + sec);
   if ($('#v-admin').classList.contains('hidden')) { mostrarVista('v-admin'); detenerReloj(); }
+  if (!S.pendTimer) iniciarSondeoPendientes(); // por si se entró al panel sin pasar por mostrarAdmin
   $$('.seccion').forEach(x => x.classList.toggle('hidden', x.id !== 's-' + sec));
   $$('[data-acc="nav"]').forEach(b => b.classList.toggle('activo', b.dataset.sec === sec));
+  const grupo = GRUPOS_MENU.find(g => g.secciones.includes(sec));
+  if (grupo && $(`[data-grupo-items="${grupo.id}"]`)?.classList.contains('hidden')) alternarGrupoMenu(grupo.id, true);
   ({ dashboard: cargarDashboard, empleados: cargarEmpleados, asistencia: cargarAsistencia,
      permisos: cargarPermisos, evaluaciones: cargarEvaluaciones, ajustes: cargarAjustes, tareas: cargarTareas,
      agenda: cargarAgenda, curriculums: cargarCurriculums, registro: cargarRegistro, ayuda: cargarAyuda,
@@ -1676,9 +1802,10 @@ function pintarAlertas(depto, q) {
     else if (e.FinContrato && e.FinContrato <= en30) item('file-clock', 'ambar', `Contrato por vencer: ${nombreCompleto(e)}`, `Vence el ${fmtFecha(e.FinContrato)}`, e.ID);
     const v = saldoVacaciones(e);
     if (v && v.pendientes >= 30) item('sun', 'azul', `Vacaciones acumuladas: ${nombreCompleto(e)}`, `${v.pendientes} días pendientes por disfrutar`, e.ID);
-    [['Cédula', e.CedulaVencimiento], ['RIF', e.RifVencimiento]].forEach(([doc, f]) => {
+    // La cédula es femenina ("vencida") y el RIF masculino ("vencido")
+    [['Cédula', e.CedulaVencimiento, 'vencida'], ['RIF', e.RifVencimiento, 'vencido']].forEach(([doc, f, vencidoTxt]) => {
       const st = estadoDoc(f);
-      if (st === 'vencido') item('id-card', 'rosa', `${doc} vencido: ${nombreCompleto(e)}`, `Venció el ${fmtFecha(f)}. Pide el documento actualizado.`, e.ID);
+      if (st === 'vencido') item('id-card', 'rosa', `${doc} ${vencidoTxt}: ${nombreCompleto(e)}`, `Venció el ${fmtFecha(f)}. Pide el documento actualizado.`, e.ID);
       else if (st === 'por vencer') item('id-card', 'ambar', `${doc} por vencer: ${nombreCompleto(e)}`, `Vence el ${fmtFecha(f)}`, e.ID);
     });
     if (!e.Email) item('mail-x', 'gris', `Sin correo registrado: ${nombreCompleto(e)}`, 'No podrá marcar asistencia', e.ID);
@@ -1697,6 +1824,7 @@ function pintarAlertas(depto, q) {
   const orden = { rosa: 0, ambar: 1, azul: 2, marca: 3, violeta: 4, gris: 5 };
   a.sort((x, y) => orden[x.color] - orden[y.color]);
   $('#dash-alertas-total').textContent = a.length;
+  S.alertasN = a.length; pintarFranjaPendientes();
   $('#dash-alertas').innerHTML = a.length ? a.map(x => `
     <button ${x.acc} class="w-full text-left flex items-start gap-3 rounded-xl p-2.5 hover:bg-slate-50">
       <span class="h-8 w-8 rounded-lg ${colores[x.color]} flex items-center justify-center shrink-0"><i data-lucide="${x.icono}" class="w-4 h-4"></i></span>
@@ -1885,6 +2013,8 @@ async function guardarEmpleado() {
     } else {
       r = await api('guardarEmpleado', { empleado: datos }, { texto: 'Guardando expediente…' });
     }
+    const antes = datos.ID ? empPorId(datos.ID) : null;
+    const horarioCambio = antes && String(antes.HorarioEspecial || '') !== String(r.HorarioEspecial || '');
     const i = S.empleados.findIndex(e => e.ID === r.ID);
     if (i >= 0) S.empleados[i] = r; else S.empleados.push(r);
     invalidarCache();
@@ -1898,6 +2028,7 @@ async function guardarEmpleado() {
       } catch (e2) { toast('El expediente se creó, pero no se pudo marcar el currículum: ' + e2.message, 'aviso', 8000); }
     }
     (r._avisos || []).forEach(a => toast(a, 'aviso', 9000));
+    if (horarioCambio) await ofrecerRecalculoEmpleado(r);
     if (datos.ID && S.modalVolver) verExpediente(r.ID, S.expTab);
     else if (!datos.ID) verExpediente(r.ID, 'documentos');
     else cerrarModal();
@@ -1985,7 +2116,7 @@ function expDatos({ empleado: e }) {
       campoLectura('Tallas (camisa · pantalón · calzado)', [e.TallaCamisa, e.TallaPantalon, e.TallaCalzado].some(Boolean) ? esc([e.TallaCamisa || '—', e.TallaPantalon || '—', e.TallaCalzado || '—'].join(' · ')) : '')])}
     ${bloque('Documentos de identidad', [campoLectura('Cédula', esc(e.Cedula)),
       campoLectura('Expedición de la cédula', e.CedulaExpedicion ? fmtFecha(e.CedulaExpedicion) : ''),
-      campoLectura('Vencimiento de la cédula', fechaConEstado(e.CedulaVencimiento)), campoLectura('RIF', esc(e.RIF)),
+      campoLectura('Vencimiento de la cédula', fechaConEstado(e.CedulaVencimiento, '', true)), campoLectura('RIF', esc(e.RIF)),
       campoLectura('Vencimiento del RIF', fechaConEstado(e.RifVencimiento)), campoLectura('Domicilio fiscal', esc(e.DomicilioFiscal))])}
     ${bloque('Contacto de emergencia', [campoLectura('Nombre', esc(e.EmergenciaNombre)), campoLectura('Teléfono', esc(e.EmergenciaTelefono)), campoLectura('Parentesco', esc(e.EmergenciaParentesco))])}
     ${e.Notas ? `<div class="tarjeta p-5"><h5 class="font-bold text-sm text-marca-700 mb-2">Notas internas</h5><p class="text-sm whitespace-pre-line">${esc(e.Notas)}</p></div>` : ''}
@@ -2978,10 +3109,17 @@ async function pintarEmpleadoMesDash() {
   const emps = empleadosDelPeriodo(desde, hasta, '', '').filter(e => e.Estado !== 'Inactivo');
   const k = calcularKPIs(emps, asis, S.permisos, S.evaluaciones, desde, hasta);
   if (!S.ped) await cargarPedidos();
-  const rank = k.filas.filter(r => r.asistidos > 0 && r.esperados > 0).map(r => {
-    const prod = produccionDe({ email: r.e.Email }, desde, hasta);
+  const fmla = $('#dash-mes-formula'); if (fmla) fmla.textContent = textoFormulaMes();
+  const prodDep = {};
+  const conMarcajes = k.filas.filter(r => r.asistidos > 0 && r.esperados > 0).map(r => {
+    const dep = r.e.Departamento || '';
+    if (!(dep in prodDep)) prodDep[dep] = produccionDe({ dep }, desde, hasta);
+    const prod = prodDep[dep];
     return Object.assign({ puntaje: puntajeMes(r, prod.puntaje), prod }, r);
-  }).sort((a, b) => b.puntaje - a.puntaje || a.minRetraso - b.minRetraso || b.minTrabajados - a.minTrabajados).slice(0, 5);
+  });
+  const sinEval = conMarcajes.filter(r => r.puntaje === null).map(r => nombreCompleto(r.e)).sort();
+  const rank = conMarcajes.filter(r => r.puntaje !== null)
+    .sort((a, b) => b.puntaje - a.puntaje || a.minRetraso - b.minRetraso || b.minTrabajados - a.minTrabajados).slice(0, 5);
   const rec = (S.reconocimientos || []).find(x => x.Periodo === per && x.Tipo !== 'DEPARTAMENTO');
   const g = rec ? empPorId(rec.EmpleadoID) : null;
   const izq = g ? `<div class="h-full rounded-2xl p-5 text-center bg-gradient-to-br from-oro-50 via-white to-marca-50 border border-oro-300">
@@ -3003,14 +3141,14 @@ async function pintarEmpleadoMesDash() {
         ${avatarHTML(r.e.FotoMini, nombreCompleto(r.e))}
         <div class="flex-1 min-w-0">
           <button data-acc="ver-expediente" data-id="${esc(r.e.ID)}" class="block font-semibold text-slate-800 hover:text-marca-700 truncate text-left">${esc(nombreCompleto(r.e))}</button>
-          <p class="text-xs text-slate-500 truncate">${esc(r.e.Departamento)} · puntualidad ${fmtPct(r.pctPuntualidad)} · asistencia ${fmtPct(r.pctAsistencia)}${r.evalProm !== null ? ` · desempeño ${fmtNum(r.evalProm)}` : ''}${r.prod && r.prod.puntaje !== null ? ` · producción ${fmtNum(r.prod.puntaje)}${r.prod.rechazos ? ` (${r.prod.rechazos} rechazo${r.prod.rechazos === 1 ? '' : 's'})` : ''}` : ''}</p>
+          <p class="text-xs text-slate-500 truncate">${esc(r.e.Departamento)} · puntualidad ${fmtPct(r.pctPuntualidad)} · asistencia ${fmtPct(r.pctAsistencia)}${r.evalProm !== null ? ` · desempeño ${fmtNum(r.evalProm)}` : ''}${r.prod && r.prod.puntaje !== null ? ` · producción del dpto. ${fmtNum(r.prod.puntaje)}` : ''}</p>
         </div>
         <span class="text-lg font-extrabold tabular-nums ${colorPuntaje(r.puntaje)}">${fmtNum(r.puntaje)}</span>
         <button data-acc="reconocer" data-id="${esc(r.e.ID)}" data-puntaje="${r.puntaje.toFixed(1)}" class="btn btn-sm bg-oro-400 text-navy-950 hover:bg-oro-300 solo-rrhh no-print">Reconocer</button>
       </div>`).join('')}</div>`
-    : '<p class="text-sm text-slate-400 text-center py-8">No hay marcajes en ese mes para calcular el ranking.</p>';
-  cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}</div>`;
-  pintarDeptoMesDash(per, k.filas, desde, hasta);
+    : `<p class="text-sm text-slate-400 text-center py-8">${conMarcajes.length ? 'Todavía nadie tiene su evaluación de desempeño de este mes.' : 'No hay marcajes en ese mes para calcular el ranking.'}</p>`;
+  cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}${faltaEvaluarHTML(sinEval)}</div>`;
+  pintarDeptoMesDash(per, conMarcajes, desde, hasta);
   iconos();
 }
 
@@ -3522,6 +3660,22 @@ async function ajRespaldo() {
   } catch (e) { toast(e.message, 'error', 7000); }
 }
 
+/**
+ * v4.2.1: al cambiar el horario de una persona, RRHH decide si se recalculan sus días ya marcados
+ * (retrasos y horas extra con el horario nuevo). Si no, el horario nuevo aplica solo desde hoy.
+ */
+async function ofrecerRecalculoEmpleado(e) {
+  const ok = await dialogo({ titulo: 'Cambió el horario de ' + nombreCompleto(e),
+    mensaje: '¿Quieres recalcular sus días ya marcados (retrasos, horas trabajadas y horas extra) con el horario nuevo? Si eliges "Ahora no", el horario nuevo se aplica solo desde hoy.',
+    boton: 'Recalcular sus días', cancelar: 'Ahora no' });
+  if (!ok) return;
+  try {
+    const r = await api('recalcularEmpleado', { empleadoId: e.ID }, { texto: 'Recalculando…' });
+    toast(`Listo: ${r.cambios} valor(es) actualizados en la asistencia de ${nombreCompleto(e)}.`, 'ok', 6000);
+    invalidarCache();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 async function ajRecalcular() {
   if (!await dialogo({ titulo: '¿Recalcular toda la asistencia?', mensaje: 'Se recalcularán retrasos, horas trabajadas y horas extra de TODOS los marcajes con el horario y las reglas actuales. Úsalo después de cambiar el horario o la tolerancia.', boton: 'Recalcular' })) return;
   try {
@@ -3563,26 +3717,26 @@ function pintarDeptoMes() {
     </div>`;
 }
 
+/**
+ * Ranking de departamentos (v4.2.1): promedio del puntaje de las personas del equipo que ya tienen
+ * evaluación del mes (mismos pesos, con la producción del departamento). Sin nadie evaluado, no entra.
+ */
 function pintarDeptoMesDash(per, filas, desde, hasta) {
   const cont = $('#dash-dmes-cuerpo');
   if (!cont) return;
   const g = {};
   const prom = xs => xs.reduce((s, x) => s + x, 0) / xs.length;
-  filas.filter(r => r.asistidos > 0 && r.esperados > 0).forEach(r => {
-    const p = r.pctPuntualidad ?? 0, a = r.pctAsistencia ?? 100;
+  filas.forEach(r => {
     const d = r.e.Departamento || 'Sin departamento';
-    (g[d] = g[d] || { d, pts: [], punt: [], asis: [], ev: [] });
-    g[d].pts.push(puntajeMes(r, null));
-    g[d].punt.push(p); g[d].asis.push(a);
-    if (r.evalProm !== null) g[d].ev.push(r.evalProm);
+    (g[d] = g[d] || { d, pts: [], punt: [], asis: [], ev: [], prod: r.prod });
+    if (r.puntaje === null) return;
+    g[d].pts.push(r.puntaje);
+    g[d].punt.push(r.pctPuntualidad ?? 0); g[d].asis.push(r.pctAsistencia ?? 100); g[d].ev.push(r.evalProm);
   });
-  const rank = Object.values(g).map(x => {
-    // v4.2: la producción del departamento (etapas aprobadas y rechazos de RRHH) suma con su peso
-    const prod = produccionDe({ dep: x.d }, desde, hasta);
-    const base = prom(x.pts), w = S.sesion.pesosMes || {};
-    const puntaje = prod.puntaje === null || !w.produccion ? base : (base * (100 - w.produccion) + prod.puntaje * w.produccion) / 100;
-    return { d: x.d, n: x.pts.length, puntaje, punt: prom(x.punt), asis: prom(x.asis), ev: x.ev.length ? prom(x.ev) : null, prod };
-  })
+  const grupos = Object.values(g);
+  const sinEval = grupos.filter(x => !x.pts.length).map(x => x.d).sort();
+  const rank = grupos.filter(x => x.pts.length)
+    .map(x => ({ d: x.d, n: x.pts.length, puntaje: prom(x.pts), punt: prom(x.punt), asis: prom(x.asis), ev: prom(x.ev), prod: x.prod }))
     .sort((a, b) => b.puntaje - a.puntaje || b.n - a.n);
   const rec = (S.reconocimientos || []).find(x => x.Periodo === per && x.Tipo === 'DEPARTAMENTO');
   const izq = rec ? `<div class="h-full rounded-2xl p-5 text-center bg-gradient-to-br from-navy-50 via-white to-oro-50 border border-navy-200">
@@ -3599,11 +3753,11 @@ function pintarDeptoMesDash(per, filas, desde, hasta) {
       <div class="flex items-center gap-3 rounded-xl p-2.5 ${rec && rec.Departamento === r.d ? 'bg-navy-50' : 'hover:bg-slate-50'}">
         <span class="w-6 text-center font-extrabold ${i === 0 ? 'text-oro-600' : 'text-slate-400'}">${['🥇', '🥈', '🥉'][i] || i + 1}</span>
         <div class="flex-1 min-w-0"><p class="font-semibold text-slate-800 truncate">${esc(r.d)}</p>
-          <p class="text-xs text-slate-500 truncate">${r.n} persona${r.n === 1 ? '' : 's'} · puntualidad ${fmtPct(r.punt)} · asistencia ${fmtPct(r.asis)}${r.ev !== null ? ` · desempeño ${fmtNum(r.ev)}` : ''}</p></div>
+          <p class="text-xs text-slate-500 truncate">${r.n} persona${r.n === 1 ? '' : 's'} evaluada${r.n === 1 ? '' : 's'} · puntualidad ${fmtPct(r.punt)} · asistencia ${fmtPct(r.asis)} · desempeño ${fmtNum(r.ev)}${r.prod && r.prod.puntaje !== null ? ` · producción ${fmtNum(r.prod.puntaje)}${r.prod.rechazos ? ` (${r.prod.rechazos} rechazo${r.prod.rechazos === 1 ? '' : 's'})` : ''}` : ''}</p></div>
         <span class="text-lg font-extrabold tabular-nums ${colorPuntaje(r.puntaje)}">${fmtNum(r.puntaje)}</span>
         <button data-acc="reconocer-depto" data-depto="${esc(r.d)}" data-puntaje="${r.puntaje.toFixed(1)}" class="btn btn-sm bg-navy-900 text-white hover:bg-navy-950 solo-rrhh no-print">Reconocer</button>
-      </div>`).join('')}</div>` : '<p class="text-sm text-slate-400 text-center py-8">No hay marcajes en ese mes para calcular el ranking.</p>';
-  cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}</div>`;
+      </div>`).join('')}</div>` : `<p class="text-sm text-slate-400 text-center py-8">${grupos.length ? 'Ningún departamento tiene todavía personas evaluadas este mes.' : 'No hay marcajes en ese mes para calcular el ranking.'}</p>`;
+  cont.innerHTML = `<div class="lg:col-span-2">${izq}</div><div class="lg:col-span-3">${der}${faltaEvaluarHTML(sinEval, sinEval.length === 1 ? 'departamento' : 'departamentos')}</div>`;
 }
 
 async function reconocerDepto(depto, puntaje) {
@@ -4398,7 +4552,7 @@ function pintarCurriculums() {
     { t: 'Departamento', v: c => esc(c.Departamento || '—'), s: c => c.Departamento, c: c => c.Departamento },
     { t: 'Fuente', v: c => c.Fuente === 'Portal web' ? '<span class="insignia bg-oro-100 text-oro-700">🌐 Portal web</span>' : `<span class="text-xs text-slate-500">${esc(c.Fuente || '—')}</span>`, c: c => c.Fuente },
     { t: 'RIF', v: c => esc(c.RIF), c: c => c.RIF, cls: 'hidden' },
-    { t: 'Documentos', v: c => c.Fuente === 'Portal web' ? [fechaConEstado(c.CedulaVencimiento, 'Cédula'), fechaConEstado(c.RifVencimiento, 'RIF')].join('<br>') : '—', c: c => [c.CedulaVencimiento, c.RifVencimiento].join(' / '), cls: 'hidden' },
+    { t: 'Documentos', v: c => c.Fuente === 'Portal web' ? [fechaConEstado(c.CedulaVencimiento, 'Cédula', true), fechaConEstado(c.RifVencimiento, 'RIF')].join('<br>') : '—', c: c => [c.CedulaVencimiento, c.RifVencimiento].join(' / '), cls: 'hidden' },
     { t: 'Nacimiento', v: c => c.FechaNacimiento ? `${esc(fmtFecha(c.FechaNacimiento))} <span class="text-slate-400">(${edad(c.FechaNacimiento)})</span>` : '—', s: c => c.FechaNacimiento, c: c => c.FechaNacimiento, cls: 'hidden' },
     { t: 'Experiencia', v: c => c.Experiencia !== '' ? `${esc(c.Experiencia)} año${c.Experiencia === '1' ? '' : 's'}` : '—', s: c => num(c.Experiencia), c: c => c.Experiencia, cls: 'text-right' },
     { t: 'Pre-evaluación', v: c => estrellasHTML(c.ID, c.Estrellas, rr), s: c => num(c.Estrellas), c: c => c.Estrellas },
@@ -4455,7 +4609,7 @@ function formCurriculum(id = null) {
         ${c.LecturaDocs ? `<p class="text-xs ${/^Datos leídos/.test(c.LecturaDocs) ? 'text-slate-500' : 'text-amber-700'}">${esc(c.LecturaDocs)}</p>` : ''}
         <div class="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-slate-600 mt-2">
           <span>Nacimiento: <b>${c.FechaNacimiento ? esc(fmtFecha(c.FechaNacimiento)) + ' (' + edad(c.FechaNacimiento) + ' años)' : '—'}</b></span><span>RIF: <b>${esc(c.RIF || '—')}</b></span>
-          <span>Cédula vence: ${fechaConEstado(c.CedulaVencimiento)}</span><span>RIF vence: ${fechaConEstado(c.RifVencimiento)}</span>
+          <span>Cédula vence: ${fechaConEstado(c.CedulaVencimiento, '', true)}</span><span>RIF vence: ${fechaConEstado(c.RifVencimiento)}</span>
           <span class="sm:col-span-2">Domicilio fiscal: <b>${esc(c.DomicilioFiscal || '—')}</b></span></div>
         <div class="flex flex-wrap gap-2 pt-2">${c.CedulaFileID ? `<button type="button" data-acc="ver-cedula-cv" data-id="${esc(c.ID)}" class="btn-sec btn-sm"><i data-lucide="id-card" class="w-4 h-4"></i>Ver cédula</button>` : ''}
           ${c.RifFileID ? `<button type="button" data-acc="ver-rif-cv" data-id="${esc(c.ID)}" class="btn-sec btn-sm"><i data-lucide="receipt-text" class="w-4 h-4"></i>Ver RIF</button>` : ''}</div></div>` : ''}
@@ -4728,6 +4882,7 @@ function escucharServiceWorker() {
       if (!$('#v-marcaje').classList.contains('hidden')) refrescarTabEmp();
       if (S.seccion === 'pedidos' && !$('#v-admin').classList.contains('hidden')) cargarPedidosAdmin();
       if (S.seccion === 'tareas' && !$('#v-admin').classList.contains('hidden')) cargarTareas(true);
+      refrescarPendientes(); // un aviso nuevo suele traer un pendiente nuevo
     }
     if (m.tipo === 'abrir' && m.ruta && S.sesion) { cerrarModal(); location.hash = m.ruta; }
   });
@@ -4754,7 +4909,7 @@ const COLOR_CAT = ['bg-sky-100 text-sky-700', 'bg-violet-100 text-violet-700', '
 const ETIQUETA_ACCION = { ENTRADA: 'Marcó entrada', SALIDA: 'Marcó salida', AJUSTES: 'Cambió ajustes', RESPALDO: 'Respaldo creado', EMPLEADO_DEL_MES: 'Empleado del mes',
   DEPARTAMENTO_DEL_MES: 'Departamento del mes', SOLICITUD_ACCESO: 'Pidió acceso', SOLICITUD_MARCAJE: 'Pidió marcaje manual', PERMISO_SOLICITADO: 'Pidió permiso',
   TAREA_PROPUESTA: 'Propuso una actividad', TAREA_APROBADA: 'Aprobó una actividad', TAREA_RECHAZADA: 'No aprobó una actividad', TAREA_RETIRADA: 'Retiró una actividad',
-  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos', ASISTENCIA_MANUAL_LOTE: 'Registro manual de varios días',
+  NOTIFICACIONES_ACTIVADAS: 'Activó notificaciones', NOTIFICACIONES_DESACTIVADAS: 'Desactivó notificaciones', MIGRACION_CARGOS: 'Cargos corregidos', ASISTENCIA_MANUAL_LOTE: 'Registro manual de varios días', ASISTENCIA_RECALCULADA: 'Asistencia recalculada',
   MARCAJE_FALLIDO: 'Marcaje fallido (GPS del teléfono)', SESIONES_CERRADAS: 'Se cerraron todas las sesiones',
   PAUSA_REGISTRADA: 'Registró una pausa', PAUSA_ELIMINADA: 'Quitó una pausa', PEDIDO_CREADO: 'Creó un pedido', PEDIDO_EDITADO: 'Editó un pedido',
   PEDIDO_AUTORIZADO: 'Autorizó un pedido', PEDIDO_NO_AUTORIZADO: 'No autorizó un pedido', PEDIDO_TOMAR: 'Tomó un pedido', PEDIDO_LISTO: 'Terminó una etapa',
@@ -5049,6 +5204,8 @@ const ACC = {
   'probar-notif': () => probarNotificacion(),
   'oir-sonido': () => sonarNotificacion(true),
   'notif-luego': () => { try { localStorage.setItem('aa_notif_luego', String(Date.now())); } catch (e) { /* nada */ } $('#mc-notif').classList.add('hidden'); },
+  'nav-grupo': d => alternarGrupoMenu(d.grupo),
+  'ver-alertas': () => $('#dash-alertas')?.closest('.tarjeta')?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
   'ir-notif': d => { cerrarModal(); if (d.ruta) { if (location.hash === d.ruta) entrarSegunRuta(); else location.hash = d.ruta; } },
   'guardar-tarea': () => guardarTareaForm(),
   'borrar-tarea': d => borrarTarea(d.id),
@@ -5184,7 +5341,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const TABS_EMP = ['asistencia', 'trabajo', 'tramites'];
 const CON_INSIGNIA = ['asistencia', 'empleados', 'permisos', 'tareas', 'pedidos', 'constancias', 'curriculums', 'materiales'];
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const URL_PORTAL = APP_URL + 'trabaja.html';
+const URL_PORTAL = APP_URL + 'postulaciones.html';
 
 /* ---------- Horario especial ---------- */
 /** Lee el horario especial guardado en el expediente (o null si usa el general). */
@@ -5655,7 +5812,7 @@ async function autorizarPedido(id, autorizar) {
     await api('autorizarPedido', { id, autorizar, motivo }, { texto: autorizar ? 'Autorizando…' : 'Guardando…' });
     toast(autorizar ? 'Pedido autorizado: ya está en producción y se avisó al primer departamento.' : 'Pedido no autorizado. Ventas fue notificada.', 'ok', 7000);
     S.sesion.pedidosPorAutorizar = Math.max(0, (S.sesion.pedidosPorAutorizar || 1) - 1);
-    actualizarInsignia(S.sesion.pedidosPorAutorizar, 'pedidos');
+    aplicarPendientes();
     cerrarModal(); cargarPedidos();
   } catch (e) { toast(e.message, 'error', 7000); }
 }
@@ -5677,6 +5834,10 @@ function pintarPedidosAdmin() {
     .sort((a, b) => (ORDEN_PRIORIDAD[a.Prioridad] - ORDEN_PRIORIDAD[b.Prioridad]) || String(a.FechaLimite || '9').localeCompare(String(b.FechaLimite || '9')));
   const activos = todos.filter(x => PEDIDO_ACTIVO.includes(x.Estado));
   const vencidos = activos.filter(x => x.FechaLimite && x.FechaLimite < hoyStr() && x.Estado !== 'Cliente avisado');
+  // Los contadores del menú y de la franja "Pendientes" siguen a la lista recién cargada
+  S.sesion.pedidosPorAutorizar = todos.filter(x => x.Estado === 'Por autorizar').length;
+  S.sesion.pedidosPorRevisar = todos.filter(porRevisar).length;
+  aplicarPendientes();
   $('#pd-resumen').innerHTML = [
     tarjetaKPI('hourglass', 'Por autorizar', todos.filter(x => x.Estado === 'Por autorizar').length, 'Esperan la aprobación de RRHH', 'violeta'),
     tarjetaKPI('search-check', 'Por revisar', todos.filter(porRevisar).length, 'Trabajos terminados que RRHH debe revisar', 'ambar'),
@@ -5951,7 +6112,8 @@ function pintarConstanciasAdmin() {
   if (!S.cons) return;
   const lista = S.cons.slice().sort((a, b) => ((a.Estado === 'Pendiente') === (b.Estado === 'Pendiente') ? 0 : a.Estado === 'Pendiente' ? -1 : 1));
   S.sesion.constanciasPendientes = S.cons.filter(c => c.Estado === 'Pendiente').length;
-  actualizarInsignia(S.sesion.constanciasPendientes, 'constancias');
+  if (Array.isArray(S.hx)) S.sesion.consultasExtraPendientes = S.hx.filter(c => c.Estado === 'Pendiente').length;
+  aplicarPendientes();
   renderTabla('co-tabla', 't-constancias', [
     { t: 'Persona', v: c => `<button data-acc="ver-expediente" data-id="${esc(c.EmpleadoID)}" class="font-semibold text-slate-800 hover:text-marca-700 text-left">${esc(nombreCompleto(empPorId(c.EmpleadoID)) || c.EmpleadoID)}</button><div class="text-xs text-slate-500">${esc(empPorId(c.EmpleadoID)?.Departamento || '')}</div>`, s: c => nombreCompleto(empPorId(c.EmpleadoID)), c: c => nombreCompleto(empPorId(c.EmpleadoID)) },
     { t: 'Tipo', v: c => esc(c.Tipo), s: c => c.Tipo, c: c => c.Tipo },
@@ -5980,7 +6142,8 @@ async function resolverConstancia(id, aprobar) {
 async function cargarIndicadores() {
   const meses = Number($('#ih-meses').value) || 12;
   const hoy = hoyStr();
-  const ini = fechaStr(new Date(Number(hoy.slice(0, 4)), Number(hoy.slice(5, 7)) - meses, 1));
+  // v4.2.1: no se cargan meses anteriores al inicio del sistema
+  const ini = [fechaStr(new Date(Number(hoy.slice(0, 4)), Number(hoy.slice(5, 7)) - meses, 1)), primerMesSistema() + '-01'].sort()[1];
   if (!S.ih || S.ih.desde > ini || Date.now() - S.ih.t > 5 * 60000) {
     $('#ih-kpis').innerHTML = '<p class="text-sm text-slate-400 pulso col-span-4">Cargando el histórico…</p>';
     try {
@@ -5997,9 +6160,10 @@ function pintarIndicadores() {
   if (!S.ih) return;
   const meses = Number($('#ih-meses').value) || 12, dep = $('#ih-depto').value;
   const hoy = hoyStr();
-  const lista = [];
+  const lista = [], primerMes = primerMesSistema();
   for (let k = meses - 1; k >= 0; k--) {
     const d = new Date(Number(hoy.slice(0, 4)), Number(hoy.slice(5, 7)) - 1 - k, 1);
+    if (fechaStr(d).slice(0, 7) < primerMes) continue; // v4.2.1: el histórico empieza con el sistema
     const desde = fechaStr(d), finMes = fechaStr(new Date(d.getFullYear(), d.getMonth() + 1, 0)), hasta = finMes > hoy ? hoy : finMes;
     const emps = S.ih.empleados.filter(e => (!dep || e.Departamento === dep) && (!e.FechaIngreso || e.FechaIngreso <= hasta) && (!e.FechaEgreso || e.FechaEgreso >= desde));
     const k2 = calcularKPIs(emps, S.ih.asistencia.filter(a => a.Fecha >= desde && a.Fecha <= hasta), S.ih.permisos, S.ih.evaluaciones, desde, hasta).tot;
@@ -6013,7 +6177,8 @@ function pintarIndicadores() {
   S.ihFilas = lista;
   const ult = lista[lista.length - 1] || {}, prev = lista[lista.length - 2] || {};
   const prom = k => { const v = lista.map(x => x[k]).filter(x => x !== null && x !== undefined); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
-  $('#ih-subtitulo').textContent = `Últimos ${meses} meses${dep ? ' · ' + dep : ' · toda la empresa'} · el mes actual va hasta hoy`;
+  const recortado = lista.length < meses;
+  $('#ih-subtitulo').textContent = `${recortado ? `Desde ${fmtPeriodo(primerMes).toLowerCase()} (inicio del sistema)` : `Últimos ${meses} meses`}${dep ? ' · ' + dep : ' · toda la empresa'} · el mes actual va hasta hoy`;
   const delta = (a, b, inv = false, suf = ' pts') => (a === null || b === null || a === undefined || b === undefined) ? 'sin comparación' : `<span class="${(a - b) * (inv ? -1 : 1) >= 0 ? 'text-emerald-600' : 'text-rose-600'} font-semibold">${a - b >= 0 ? '▲' : '▼'} ${Math.abs(a - b).toLocaleString('es-VE', { maximumFractionDigits: 1 })}${suf}</span> vs. mes anterior`;
   $('#ih-kpis').innerHTML = [
     tarjetaKPI('calendar-check', 'Asistencia promedio', fmtPct(prom('asis')), `Este mes: ${fmtPct(ult.asis)} · ${delta(ult.asis, prev.asis)}`, 'verde'),
@@ -6053,6 +6218,11 @@ function pintarIndicadores() {
     { t: 'Rotación', v: x => fmtPct(x.rotacion), c: x => x.rotacion === null ? '' : Math.round(x.rotacion * 10) / 10 },
     { t: 'Desempeño', v: x => x.eval === null ? '—' : fmtNum(x.eval), c: x => x.eval === null ? '' : Math.round(x.eval) }
   ], lista.slice().reverse(), { vacio: 'Sin datos.' });
+}
+
+/** Mes (aaaa-mm) en que empezó a usarse el sistema; los meses anteriores no se muestran en los históricos. */
+function primerMesSistema() {
+  return String(S.sesion?.inicioSistema || '2026-11-02').slice(0, 7);
 }
 
 /* ---------- Ajustes v4 ---------- */
@@ -6169,11 +6339,14 @@ function estadoDoc(fecha) {
   return fecha <= sumarDias(hoyStr(), 30) ? 'por vencer' : '';
 }
 
-/** Fecha de vencimiento con su insignia de estado ("Vencido" en rojo, "Por vencer" en ámbar). */
-function fechaConEstado(fecha, prefijo = '') {
+/**
+ * Fecha de vencimiento con su insignia de estado ("Vencida/Vencido" en rojo, "Por vencer" en ámbar).
+ * femenino = true para la cédula ("Vencida"); el RIF va en masculino ("Vencido").
+ */
+function fechaConEstado(fecha, prefijo = '', femenino = false) {
   if (!fecha) return prefijo ? `${esc(prefijo)}: —` : '';
   const st = estadoDoc(fecha);
-  const ins = st === 'vencido' ? ' <span class="insignia bg-rose-100 text-rose-700">Vencido</span>' : st === 'por vencer' ? ' <span class="insignia bg-amber-100 text-amber-700">Por vencer</span>' : '';
+  const ins = st === 'vencido' ? ` <span class="insignia bg-rose-100 text-rose-700">${femenino ? 'Vencida' : 'Vencido'}</span>` : st === 'por vencer' ? ' <span class="insignia bg-amber-100 text-amber-700">Por vencer</span>' : '';
   return `${prefijo ? esc(prefijo) + ': ' : ''}${esc(fmtFecha(fecha))}${ins}`;
 }
 
@@ -6183,7 +6356,7 @@ function alertasDocumentosHTML(e) {
   if (!avisos.length) return '';
   const vencido = avisos.some(x => x.st === 'vencido');
   return `<p class="mt-1.5 inline-flex items-center gap-1.5 rounded-lg ${vencido ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'} px-2.5 py-1 text-xs font-semibold mr-1">
-    <i data-lucide="id-card" class="w-3.5 h-3.5"></i>${avisos.map(x => `${x.st === 'vencido' ? 'La' : 'La'} ${x.doc === 'RIF' ? 'constancia de RIF' : x.doc} ${x.st === 'vencido' ? 'venció el' : 'vence el'} ${fmtFecha(x.f)}`).join(' · ')}</p>`;
+    <i data-lucide="id-card" class="w-3.5 h-3.5"></i>${avisos.map(x => `La ${x.doc === 'RIF' ? 'constancia de RIF' : x.doc} ${x.st === 'vencido' ? 'venció el' : 'vence el'} ${fmtFecha(x.f)}`).join(' · ')}</p>`;
 }
 
 /** Descarga la constancia con su nombre (Constancia_de_Trabajo_Nombre_Apellido_dd_mm_aaaa.pdf). */
@@ -6279,16 +6452,40 @@ function totalVacPrevias(e) {
 }
 
 /**
- * Puntaje del empleado del mes con los pesos de Ajustes. Si a la persona le falta algún dato
- * (sin evaluación o sin etapas de producción), ese peso se reparte entre los demás.
+ * Puntaje del empleado del mes con los pesos de Ajustes (v4.2.1).
+ * - Sin evaluación de desempeño del mes: devuelve null (no entra al ranking; RRHH debe evaluarla primero).
+ * - Producción: la del departamento de la persona. Si su departamento no trabajó en pedidos ese mes,
+ *   ese peso se reparte entre puntualidad, asistencia y evaluación.
  */
 function puntajeMes(r, prod) {
-  const w = S.sesion.pesosMes || { puntualidad: 40, asistencia: 30, evaluacion: 30, produccion: 0 };
-  const partes = [[r.pctPuntualidad ?? 0, w.puntualidad], [r.pctAsistencia ?? 100, w.asistencia]];
-  if (r.evalProm !== null && r.evalProm !== undefined) partes.push([r.evalProm, w.evaluacion]);
+  if (r.evalProm === null || r.evalProm === undefined) return null;
+  const w = pesosDelMes();
+  const partes = [[r.pctPuntualidad ?? 0, w.puntualidad], [r.pctAsistencia ?? 100, w.asistencia], [r.evalProm, w.evaluacion]];
   if (prod !== null && prod !== undefined) partes.push([prod, w.produccion]);
   const total = partes.reduce((s, [, p]) => s + p, 0) || 1;
   return partes.reduce((s, [v, p]) => s + v * p, 0) / total;
+}
+
+/** Pesos configurados en Ajustes (o los de fábrica si la sesión es de un servidor viejo). */
+function pesosDelMes() {
+  return S.sesion.pesosMes || { puntualidad: 30, asistencia: 20, evaluacion: 25, produccion: 25 };
+}
+
+/** Texto de la fórmula para mostrarlo encima del ranking: "Ranking: 25% puntualidad + …". */
+function textoFormulaMes() {
+  const w = pesosDelMes();
+  const partes = [[w.puntualidad, 'puntualidad'], [w.asistencia, 'asistencia'], [w.evaluacion, 'evaluación de desempeño'], [w.produccion, 'producción del departamento']]
+    .filter(([p]) => p > 0).map(([p, t]) => `${p}% ${t}`);
+  return `Ranking del mes: ${partes.join(' + ')}. Solo entra quien ya tiene su evaluación del mes.`;
+}
+
+/** Lista corta de quienes no entran al ranking porque les falta la evaluación del mes. */
+function faltaEvaluarHTML(nombres, que = 'personas') {
+  if (!nombres.length) return '';
+  const lista = nombres.slice(0, 8).map(esc).join(', ') + (nombres.length > 8 ? ` y ${nombres.length - 8} más` : '');
+  return `<div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <b>Falta evaluar (${nombres.length} ${que}):</b> ${lista}.
+    ${esRRHH() ? '<button type="button" data-acc="nav" data-sec="evaluaciones" class="font-semibold underline">Ir a Desempeño</button>' : ''}</div>`;
 }
 
 /**
@@ -6535,7 +6732,7 @@ function pintarMaterialAdmin() {
       <button data-acc="mover-material" data-id="${esc(a.ID)}" data-estado="Resuelto" class="btn-primario btn-sm">Resuelto</button></div>` : '', cls: 'text-right' }
   ], l, { vacio: 'Ningún departamento ha reportado material faltante.' });
   S.sesion.materialPendiente = l.filter(a => a.Estado === 'Pendiente').length;
-  actualizarInsignia(S.sesion.materialPendiente, 'materiales');
+  aplicarPendientes();
 }
 
 /* ---------- Ajustes de la versión 4.2 ---------- */
